@@ -52,19 +52,32 @@ impl WorkflowBuilder {
 
     /// エッジを追加する
     ///
+    /// 入力エッジの場合は from に None を指定し、出力エッジの場合は to に None を指定する。
+    /// 両方とも None の場合は追加されず drop される。
+    ///
     /// # Arguments
     ///
-    /// * `from` - 始点のノードインデックス
-    /// * `to` - 終点のノードインデックス
+    /// * `from` - 始点のノードインデックス(None の場合は入力エッジ)
+    /// * `to` - 終点のノードインデックス(None の場合は出力エッジ)
     ///
     /// # Panics
     ///
     /// ノードの追加が終了していない場合、パニックする。
-    pub fn add_edge<T: 'static + Send + Sync>(mut self, from: usize, to: usize) -> Self {
-        self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+    pub fn add_edge<T: 'static + Send + Sync>(
+        mut self,
+        from: Option<usize>,
+        to: Option<usize>,
+    ) -> Self {
+        if let (Some(from), Some(to)) = (from, to) {
+            self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+        }
         let edge = Arc::new(Edge::new::<T>());
-        self.nodes[from].add_output(edge.clone());
-        self.nodes[to].add_input(edge);
+        if let Some(from) = from {
+            self.nodes[from].add_output(edge.clone());
+        }
+        if let Some(to) = to {
+            self.nodes[to].add_input(edge.clone());
+        }
         self
     }
 
@@ -114,8 +127,8 @@ mod tests {
             .add_node(node2)
             .add_node(node3)
             .finish_nodes()
-            .add_edge::<i32>(0, 1)
-            .add_edge::<i32>(1, 2);
+            .add_edge::<i32>(Some(0), Some(1))
+            .add_edge::<i32>(Some(1), Some(2));
         let workflow = builder.build();
         assert_eq!(workflow.nodes.len(), 3);
     }
