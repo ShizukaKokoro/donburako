@@ -9,11 +9,20 @@ use crate::node::Node;
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum RegistryError {
     #[error("Type mismatch")]
     TypeMismatch,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub(crate) struct RegistryID(Uuid);
+impl RegistryID {
+    pub fn new() -> Self {
+        RegistryID(Uuid::new_v4())
+    }
 }
 
 #[derive(Debug)]

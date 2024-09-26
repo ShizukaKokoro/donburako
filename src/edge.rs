@@ -10,12 +10,10 @@ use uuid::Uuid;
 /// エッジの識別子。
 /// レジストリにエッジを登録する際に使用される。
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct EdgeId {
-    id: Uuid,
-}
+pub struct EdgeId(Uuid);
 impl EdgeId {
     pub fn new() -> Self {
-        Self { id: Uuid::new_v4() }
+        Self(Uuid::new_v4())
     }
 }
 impl Default for EdgeId {
