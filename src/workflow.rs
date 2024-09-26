@@ -9,6 +9,7 @@ use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 /// ワークフロービルダー
 ///
@@ -81,6 +82,14 @@ impl WorkflowBuilder {
         } else {
             panic!("Graph is not built");
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub(crate) struct WorkflowID(Uuid);
+impl WorkflowID {
+    pub fn new() -> Self {
+        WorkflowID(Uuid::new_v4())
     }
 }
 
