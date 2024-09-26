@@ -106,7 +106,7 @@ impl Workflow {
         for next_index in self.graph.children(task_index) {
             let nt = self.nodes.get(*next_index).unwrap();
             let mut rg = registry.lock().await;
-            if rg.check(nt).await {
+            if rg.check(nt) {
                 rg.enqueue(*next_index);
             }
         }

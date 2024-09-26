@@ -43,7 +43,7 @@ impl Registry {
         Ok(*data.downcast().unwrap())
     }
 
-    pub async fn check(&self, node: &Node) -> bool {
+    pub fn check(&self, node: &Node) -> bool {
         for input in node.inputs() {
             if !self.data.contains_key(&input.id()) {
                 return false;
@@ -113,7 +113,7 @@ mod tests {
             builder.add_input(edge);
             builder.build()
         };
-        let res = registry.check(&node).await;
+        let res = registry.check(&node);
         assert!(res);
     }
 
