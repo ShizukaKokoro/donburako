@@ -72,7 +72,7 @@ impl WorkflowBuilder {
         self
     }
 
-    fn build(self) -> Workflow {
+    pub(crate) fn build(self) -> Workflow {
         if let Some(graph) = self.graph {
             graph.check_start_end();
             Workflow {
@@ -85,10 +85,13 @@ impl WorkflowBuilder {
     }
 }
 
+/// ワークフローID
+///
+/// 実行するワークフローを指定する時に利用する
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub(crate) struct WorkflowID(Uuid);
+pub struct WorkflowID(Uuid);
 impl WorkflowID {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         WorkflowID(Uuid::new_v4())
     }
 }
