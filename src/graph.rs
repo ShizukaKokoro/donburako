@@ -48,18 +48,50 @@ impl Graph {
         false
     }
 
-    pub fn get_start(&self) -> Vec<usize> {
-        let mut start = vec![true; self.0.len()];
+    pub fn get_start(&self) -> usize {
+        let mut is_start = vec![true; self.0.len()];
         for edges in &self.0 {
             for &edge in edges {
-                start[edge] = false;
+                is_start[edge] = false;
             }
         }
-        start
-            .iter()
-            .enumerate()
-            .filter_map(|(index, &is_start)| if is_start { Some(index) } else { None })
-            .collect()
+        let mut start = None;
+        for (i, flag) in is_start.iter().enumerate() {
+            if *flag {
+                if start.is_none() {
+                    start = Some(i);
+                } else {
+                    panic!("Multiple start nodes");
+                }
+            }
+        }
+        start.unwrap()
+    }
+
+    pub fn get_end(&self) -> usize {
+        let mut is_end = vec![false; self.0.len()];
+        for (i, edges) in self.0.iter().enumerate() {
+            if edges.is_empty() {
+                is_end[i] = true;
+            }
+        }
+        let mut end = None;
+        for (i, flag) in is_end.iter().enumerate() {
+            if *flag {
+                if end.is_none() {
+                    end = Some(i);
+                } else {
+                    panic!("Multiple end nodes");
+                }
+            }
+        }
+        end.unwrap()
+    }
+
+    pub(crate) fn check_start_end(&self) {
+        if !self.check_valid_path(self.get_start(), self.get_end()) {
+            panic!("No path from start to end");
+        }
     }
 
     pub fn children(&self, from: usize) -> &Vec<usize> {
@@ -84,6 +116,22 @@ mod tests {
         let mut graph = Graph::new(3);
         graph.add_edge(0, 1).unwrap();
         graph.add_edge(1, 2).unwrap();
-        assert_eq!(graph.get_start(), vec![0]);
+        assert_eq!(graph.get_start(), 0);
+    }
+
+    #[test]
+    fn test_get_end() {
+        let mut graph = Graph::new(3);
+        graph.add_edge(0, 1).unwrap();
+        graph.add_edge(1, 2).unwrap();
+        assert_eq!(graph.get_end(), 2);
+    }
+
+    #[test]
+    fn test_check_start_end() {
+        let mut graph = Graph::new(3);
+        graph.add_edge(0, 1).unwrap();
+        graph.add_edge(1, 2).unwrap();
+        graph.check_start_end();
     }
 }
