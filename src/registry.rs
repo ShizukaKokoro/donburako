@@ -83,21 +83,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn test_store_panic() {
+    fn test_store_type_mismatch() {
         let mut registry = Registry::default();
         let edge = Edge::new::<i32>();
         registry.store(&edge, 42).unwrap();
-        registry.store(&edge, "test").unwrap();
+        let res = registry.store(&edge, "test");
+        assert!(res.is_err());
     }
 
     #[test]
-    #[should_panic]
-    fn test_take_panic() {
+    fn test_take_type_mismatch() {
         let mut registry = Registry::default();
         let edge = Edge::new::<i32>();
         registry.store(&edge, 42).unwrap();
-        let _: String = registry.take(&edge).unwrap();
+        let res = registry.take::<String>(&edge);
+        assert!(res.is_err());
     }
 
     #[test]
