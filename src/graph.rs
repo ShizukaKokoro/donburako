@@ -61,6 +61,10 @@ impl Graph {
             .filter_map(|(index, &is_start)| if is_start { Some(index) } else { None })
             .collect()
     }
+
+    pub fn children(&self, from: usize) -> &Vec<usize> {
+        &self.0[from]
+    }
 }
 
 #[cfg(test)]

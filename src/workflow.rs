@@ -6,7 +6,9 @@
 use crate::edge::Edge;
 use crate::graph::Graph;
 use crate::node::{Node, NodeBuilder};
+use crate::registry::Registry;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// ワークフロービルダー
 ///
@@ -78,6 +80,24 @@ impl WorkflowBuilder {
 struct Workflow {
     nodes: Vec<Node>,
     graph: Graph,
+}
+impl Workflow {
+    async fn get_next(&self, registry: &Arc<Mutex<Registry>>) -> Option<(usize, &Node)> {
+        if let Some(index) = registry.lock().await.dequeue() {
+            return Some((index, self.nodes.get(index).unwrap()));
+        }
+        None
+    }
+
+    async fn done(&self, task_index: usize, registry: Arc<Mutex<Registry>>) {
+        for next_index in self.graph.children(task_index) {
+            let nt = self.nodes.get(*next_index).unwrap();
+            let mut rg = registry.lock().await;
+            if rg.check(nt).await {
+                rg.enqueue(*next_index);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
