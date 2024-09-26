@@ -5,6 +5,7 @@
 //! レジストリによって、同一のワークフローを同時に複数実行することができる。
 
 use crate::edge::{Edge, EdgeId};
+use crate::node::Node;
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
@@ -41,15 +42,14 @@ impl Registry {
         Ok(*data.downcast().unwrap())
     }
 
-    /*
-    pub async fn check(&self, node: &dyn Task) -> bool {
+    pub async fn check(&self, node: &dyn Node) -> bool {
         for input in node.inputs().await {
-            if !self.data.contains_key(&input.edge_id) {
+            if !self.data.contains_key(&input.id()) {
                 return false;
             }
         }
         true
-    } */
+    }
 
     pub fn enqueue(&mut self, node_index: usize) {
         self.queue.push_back(node_index);
@@ -63,6 +63,8 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node::dummy::NodeDummy;
+    use std::sync::Arc;
 
     #[test]
     fn test_store() {
@@ -98,6 +100,17 @@ mod tests {
         registry.store(&edge, 42).unwrap();
         let res = registry.take::<String>(&edge);
         assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_check() {
+        let mut registry = Registry::default();
+        let edge = Edge::new::<i32>();
+        registry.store(&edge, 42).unwrap();
+        let mut node = NodeDummy::default();
+        node.add_input(Arc::new(edge));
+        let res = registry.check(&node).await;
+        assert!(res);
     }
 
     #[test]
