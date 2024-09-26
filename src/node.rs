@@ -11,7 +11,9 @@ use tokio::sync::Mutex;
 #[async_trait]
 pub trait Node: 'static + std::fmt::Debug + Send + Sync {
     async fn inputs(&self) -> &Vec<Arc<Edge>>;
+    fn add_input(&mut self, edge: Arc<Edge>);
     async fn outputs(&self) -> &Vec<Arc<Edge>>;
+    fn add_output(&mut self, edge: Arc<Edge>);
     async fn run(&self, registry: Arc<Mutex<Registry>>);
 }
 
@@ -24,23 +26,22 @@ pub mod dummy {
         inputs: Vec<Arc<Edge>>,
         outputs: Vec<Arc<Edge>>,
     }
-    impl NodeDummy {
-        pub fn add_input(&mut self, edge: Arc<Edge>) {
-            self.inputs.push(edge);
-        }
-
-        pub fn add_output(&mut self, edge: Arc<Edge>) {
-            self.outputs.push(edge);
-        }
-    }
     #[async_trait]
     impl Node for NodeDummy {
         async fn inputs(&self) -> &Vec<Arc<Edge>> {
             &self.inputs
         }
 
+        fn add_input(&mut self, edge: Arc<Edge>) {
+            self.inputs.push(edge);
+        }
+
         async fn outputs(&self) -> &Vec<Arc<Edge>> {
             &self.outputs
+        }
+
+        fn add_output(&mut self, edge: Arc<Edge>) {
+            self.outputs.push(edge);
         }
 
         async fn run(&self, registry: Arc<Mutex<Registry>>) {
