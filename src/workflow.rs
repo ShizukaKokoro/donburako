@@ -85,7 +85,7 @@ impl WorkflowBuilder {
 }
 
 #[derive(Debug)]
-struct Workflow {
+pub(crate) struct Workflow {
     nodes: Vec<Node>,
     graph: Graph,
 }
