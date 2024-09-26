@@ -3,7 +3,7 @@
 //! タスクの実行やレジストリの管理を行うプロセッサーを実装するモジュール。
 
 use crate::registry::{Registry, RegistryID};
-use crate::workflow::{Workflow, WorkflowBuilder, WorkflowID};
+use crate::workflow::{self, Workflow, WorkflowBuilder, WorkflowID};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -29,13 +29,16 @@ impl Processor {
 
     /// ビルド
     pub fn build(self, n: usize) -> (JoinHandle<()>, Vec<WorkflowID>, mpsc::Sender<WorkflowID>) {
-        let mut workflow = HashMap::new();
-        let mut wf_ids = Vec::new();
-        for wf in self.workflow {
-            let id = WorkflowID::new();
-            workflow.insert(id, wf.build());
-            wf_ids.push(id);
-        }
+        let (workflow, wf_ids) = {
+            let mut workflow = HashMap::new();
+            let mut wf_ids = Vec::new();
+            for wf in self.workflow {
+                let id = WorkflowID::new();
+                workflow.insert(id, wf.build());
+                wf_ids.push(id);
+            }
+            (workflow, wf_ids)
+        };
 
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
