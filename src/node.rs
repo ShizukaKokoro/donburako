@@ -4,66 +4,108 @@
 
 use crate::edge::Edge;
 use crate::registry::Registry;
-use async_trait::async_trait;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[async_trait]
-pub trait Node: 'static + std::fmt::Debug + Send + Sync {
-    async fn inputs(&self) -> &Vec<Arc<Edge>>;
-    fn add_input(&mut self, edge: Arc<Edge>);
-    async fn outputs(&self) -> &Vec<Arc<Edge>>;
-    fn add_output(&mut self, edge: Arc<Edge>);
-    async fn run(&self, registry: Arc<Mutex<Registry>>);
+type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+
+type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Arc<Mutex<Registry>>) -> BoxedFuture<'a> + Send + Sync;
+
+pub struct Node {
+    inputs: Vec<Arc<Edge>>,
+    outputs: Vec<Arc<Edge>>,
+    func: Box<AsyncFn>,
+}
+impl Node {
+    pub fn new(func: Box<AsyncFn>) -> Self {
+        Self {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            func,
+        }
+    }
+
+    pub fn add_input(&mut self, edge: Arc<Edge>) {
+        self.inputs.push(edge);
+    }
+
+    pub fn add_output(&mut self, edge: Arc<Edge>) {
+        self.outputs.push(edge);
+    }
+
+    pub async fn inputs(&self) -> &Vec<Arc<Edge>> {
+        &self.inputs
+    }
+
+    pub async fn outputs(&self) -> &Vec<Arc<Edge>> {
+        &self.outputs
+    }
+
+    pub async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+        (self.func)(self, registry).await;
+    }
+}
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Node")
+            .field("inputs", &self.inputs)
+            .field("output", &self.outputs)
+            .finish()
+    }
 }
 
 #[cfg(test)]
 pub mod dummy {
     use super::*;
 
-    #[derive(Debug, Default)]
-    pub struct NodeDummy {
+    pub struct DummyNodeBuilder {
         inputs: Vec<Arc<Edge>>,
         outputs: Vec<Arc<Edge>>,
     }
-    #[async_trait]
-    impl Node for NodeDummy {
-        async fn inputs(&self) -> &Vec<Arc<Edge>> {
-            &self.inputs
+    impl DummyNodeBuilder {
+        pub fn new() -> Self {
+            Self {
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+            }
         }
 
-        fn add_input(&mut self, edge: Arc<Edge>) {
+        pub fn add_input(&mut self, edge: Arc<Edge>) -> &mut Self {
             self.inputs.push(edge);
+            self
         }
 
-        async fn outputs(&self) -> &Vec<Arc<Edge>> {
-            &self.outputs
-        }
-
-        fn add_output(&mut self, edge: Arc<Edge>) {
+        pub fn add_output(&mut self, edge: Arc<Edge>) -> &mut Self {
             self.outputs.push(edge);
+            self
         }
 
-        async fn run(&self, registry: Arc<Mutex<Registry>>) {
-            // 引数の取得
-            let arg0: u16 = registry.lock().await.take(&self.inputs[0]).unwrap();
-            let arg1: i32 = registry.lock().await.take(&self.inputs[1]).unwrap();
+        pub fn build(&self) -> Node {
+            Node::new(Box::new(|self_: &Node, registry: &Arc<Mutex<Registry>>| {
+                Box::pin(async move {
+                    // 引数の取得
+                    let arg0: u16 = registry.lock().await.take(self_.inputs[0].clone()).unwrap();
+                    let arg1: i32 = registry.lock().await.take(self_.inputs[1].clone()).unwrap();
 
-            // 処理
-            let result0 = format!("{} + {}", arg0, arg1);
-            let result1 = arg0 as i64 + arg1 as i64;
+                    // 処理
+                    let result0 = format!("{} + {}", arg0, arg1);
+                    let result1 = arg0 as i64 + arg1 as i64;
 
-            // 結果の登録
-            registry
-                .lock()
-                .await
-                .store(&self.outputs[0], result0)
-                .unwrap();
-            registry
-                .lock()
-                .await
-                .store(&self.outputs[1], result1)
-                .unwrap();
+                    // 結果の登録
+                    registry
+                        .lock()
+                        .await
+                        .store(self_.outputs[0].clone(), result0)
+                        .unwrap();
+                    registry
+                        .lock()
+                        .await
+                        .store(self_.outputs[1].clone(), result1)
+                        .unwrap();
+                })
+            }))
         }
     }
 }

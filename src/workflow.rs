@@ -10,15 +10,15 @@ use std::sync::Arc;
 
 #[derive(Default)]
 struct WorkflowBuilder {
-    nodes: Vec<Box<dyn Node>>,
+    nodes: Vec<Node>,
     graph: Option<Graph>,
 }
 impl WorkflowBuilder {
-    fn add_node(&mut self, node: impl Node) {
+    fn add_node(&mut self, node: Node) {
         if self.graph.is_some() {
             panic!("Cannot add node after building graph");
         }
-        self.nodes.push(Box::new(node));
+        self.nodes.push(node);
     }
 
     fn add_edge<T: 'static + Send + Sync>(&mut self, from: usize, to: usize) {
@@ -38,6 +38,6 @@ impl WorkflowBuilder {
 
 #[derive(Debug)]
 struct Workflow {
-    nodes: Vec<Box<dyn Node>>,
+    nodes: Vec<Node>,
     graph: Graph,
 }
