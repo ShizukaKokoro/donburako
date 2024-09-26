@@ -73,3 +73,4 @@
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 
 mod edge;
+mod registry;
