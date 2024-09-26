@@ -8,13 +8,28 @@ use crate::graph::Graph;
 use crate::node::{Node, NodeBuilder};
 use std::sync::Arc;
 
+/// ワークフロービルダー
+///
+/// ワークフローを構築するためのビルダー。
 #[derive(Default)]
-struct WorkflowBuilder {
+pub struct WorkflowBuilder {
     nodes: Vec<NodeBuilder>,
     graph: Option<Graph>,
 }
 impl WorkflowBuilder {
-    fn add_node(self, node: NodeBuilder) -> Self {
+    /// ワークフローにノードを追加する
+    ///
+    /// ノードは追加された順番でインデックスが割り振られる。
+    /// エッジ構築の際には、このインデックスを使用する。
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - ノードビルダー
+    ///
+    /// # Panics
+    ///
+    /// ノードの追加が終了した後にノードを追加しようとした場合、パニックする。
+    pub fn add_node(self, node: NodeBuilder) -> Self {
         if self.graph.is_some() {
             panic!("Cannot add node after building graph");
         }
@@ -23,14 +38,27 @@ impl WorkflowBuilder {
         Self { nodes, ..self }
     }
 
-    fn finish_nodes(self) -> Self {
+    /// ノードの追加を終了する
+    ///
+    /// ノードの追加を終了し、グラフの構築を開始する。
+    pub fn finish_nodes(self) -> Self {
         Self {
             graph: Some(Graph::new(self.nodes.len())),
             ..self
         }
     }
 
-    fn add_edge<T: 'static + Send + Sync>(mut self, from: usize, to: usize) -> Self {
+    /// エッジを追加する
+    ///
+    /// # Arguments
+    ///
+    /// * `from` - 始点のノードインデックス
+    /// * `to` - 終点のノードインデックス
+    ///
+    /// # Panics
+    ///
+    /// ノードの追加が終了していない場合、パニックする。
+    pub fn add_edge<T: 'static + Send + Sync>(mut self, from: usize, to: usize) -> Self {
         self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
         let edge = Arc::new(Edge::new::<T>());
         self.nodes[from].add_output(edge.clone());

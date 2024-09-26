@@ -13,12 +13,20 @@ type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
 type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Arc<Mutex<Registry>>) -> BoxedFuture<'a> + Send + Sync;
 
+/// ノードビルダー
+///
+/// ノードを構築するためのビルダー。
 pub struct NodeBuilder {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
 }
 impl NodeBuilder {
+    /// 新しいノードビルダーを生成する
+    ///
+    /// # Arguments
+    ///
+    /// * `func` - ノードの処理を行う関数(非同期)
     pub fn new(func: Box<AsyncFn>) -> Self {
         Self {
             inputs: Vec::new(),
@@ -27,17 +35,17 @@ impl NodeBuilder {
         }
     }
 
-    pub fn add_input(&mut self, edge: Arc<Edge>) -> &mut Self {
+    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) -> &mut Self {
         self.inputs.push(edge);
         self
     }
 
-    pub fn add_output(&mut self, edge: Arc<Edge>) -> &mut Self {
+    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) -> &mut Self {
         self.outputs.push(edge);
         self
     }
 
-    pub fn build(self) -> Node {
+    pub(crate) fn build(self) -> Node {
         Node {
             inputs: self.inputs,
             outputs: self.outputs,
@@ -46,20 +54,26 @@ impl NodeBuilder {
     }
 }
 
+/// ノード
+///
+/// ワークフローのステップとして機能するノード
 pub struct Node {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
 }
 impl Node {
-    pub async fn inputs(&self) -> &Vec<Arc<Edge>> {
+    /// ノードの入力エッジを取得する
+    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         &self.inputs
     }
 
-    pub async fn outputs(&self) -> &Vec<Arc<Edge>> {
+    /// ノードの出力エッジを取得する
+    pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         &self.outputs
     }
 
+    /// ノードを実行する
     pub async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         (self.func)(self, registry).await;
     }
@@ -77,6 +91,7 @@ impl std::fmt::Debug for Node {
 pub mod dummy {
     use super::*;
 
+    #[derive(Default)]
     pub struct DummyNodeBuilder {
         inputs: Vec<Arc<Edge>>,
         outputs: Vec<Arc<Edge>>,

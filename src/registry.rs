@@ -44,7 +44,7 @@ impl Registry {
     }
 
     pub async fn check(&self, node: &Node) -> bool {
-        for input in node.inputs().await {
+        for input in node.inputs() {
             if !self.data.contains_key(&input.id()) {
                 return false;
             }

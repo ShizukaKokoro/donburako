@@ -74,6 +74,6 @@
 
 mod edge;
 mod graph;
-mod node;
+pub mod node;
 mod registry;
-mod workflow;
+pub mod workflow;
