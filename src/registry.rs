@@ -8,7 +8,6 @@ use crate::edge::{Edge, EdgeId};
 use crate::node::Node;
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -25,7 +24,7 @@ pub struct Registry {
 impl Registry {
     pub fn store<T: 'static + Send + Sync>(
         &mut self,
-        edge: Arc<Edge>,
+        edge: &Edge,
         data: T,
     ) -> Result<(), RegistryError> {
         if !edge.check_type::<T>() {
@@ -35,7 +34,7 @@ impl Registry {
         Ok(())
     }
 
-    pub fn take<T: 'static + Send + Sync>(&mut self, edge: Arc<Edge>) -> Result<T, RegistryError> {
+    pub fn take<T: 'static + Send + Sync>(&mut self, edge: &Edge) -> Result<T, RegistryError> {
         if !edge.check_type::<T>() {
             return Err(RegistryError::TypeMismatch);
         }
@@ -71,7 +70,7 @@ mod tests {
     fn test_store() {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
-        registry.store(edge, 42).unwrap();
+        registry.store(&edge, 42).unwrap();
         assert_eq!(registry.data.len(), 1);
     }
 
@@ -79,8 +78,8 @@ mod tests {
     fn test_take() {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
-        registry.store(edge.clone(), 42).unwrap();
-        let data: i32 = registry.take(edge).unwrap();
+        registry.store(&edge, 42).unwrap();
+        let data: i32 = registry.take(&edge).unwrap();
         assert_eq!(data, 42);
         assert_eq!(registry.data.len(), 0);
     }
@@ -89,8 +88,8 @@ mod tests {
     fn test_store_type_mismatch() {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
-        registry.store(edge.clone(), 42).unwrap();
-        let res = registry.store(edge, "test");
+        registry.store(&edge, 42).unwrap();
+        let res = registry.store(&edge, "test");
         assert!(res.is_err());
     }
 
@@ -98,8 +97,8 @@ mod tests {
     fn test_take_type_mismatch() {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
-        registry.store(edge.clone(), 42).unwrap();
-        let res = registry.take::<String>(edge);
+        registry.store(&edge, 42).unwrap();
+        let res = registry.take::<String>(&edge);
         assert!(res.is_err());
     }
 
@@ -107,7 +106,7 @@ mod tests {
     async fn test_check() {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
-        registry.store(edge.clone(), 42).unwrap();
+        registry.store(&edge, 42).unwrap();
         let node = {
             let mut builder = DummyNodeBuilder::new();
             builder.add_input(edge);

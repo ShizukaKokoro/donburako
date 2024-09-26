@@ -119,10 +119,8 @@ pub mod dummy {
                 func: Box::new(|self_: &Node, registry: &Arc<Mutex<Registry>>| {
                     Box::pin(async move {
                         // 引数の取得
-                        let arg0: u16 =
-                            registry.lock().await.take(self_.inputs[0].clone()).unwrap();
-                        let arg1: i32 =
-                            registry.lock().await.take(self_.inputs[1].clone()).unwrap();
+                        let arg0: u16 = registry.lock().await.take(&self_.inputs[0]).unwrap();
+                        let arg1: i32 = registry.lock().await.take(&self_.inputs[1]).unwrap();
 
                         // 処理
                         let result0 = format!("{} + {}", arg0, arg1);
@@ -132,12 +130,12 @@ pub mod dummy {
                         registry
                             .lock()
                             .await
-                            .store(self_.outputs[0].clone(), result0)
+                            .store(&self_.outputs[0], result0)
                             .unwrap();
                         registry
                             .lock()
                             .await
-                            .store(self_.outputs[1].clone(), result1)
+                            .store(&self_.outputs[1], result1)
                             .unwrap();
                     })
                 }),

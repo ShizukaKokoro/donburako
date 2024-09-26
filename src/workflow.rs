@@ -138,11 +138,7 @@ mod tests {
         let node1 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
-                let a: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[0].clone())
-                    .unwrap();
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
                 assert_eq!(a, "to 1");
 
                 // タスクの処理
@@ -151,18 +147,14 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[0].clone(), "1 to 3")
+                    .store(&self_.outputs()[0], "1 to 3")
                     .unwrap();
             })
         }));
         let node2 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
-                let a: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[0].clone())
-                    .unwrap();
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
                 assert_eq!(a, "to 2");
 
                 // タスクの処理
@@ -171,24 +163,16 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[0].clone(), "2 to 5")
+                    .store(&self_.outputs()[0], "2 to 5")
                     .unwrap();
             })
         }));
         let node3 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
-                let a: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[0].clone())
-                    .unwrap();
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
                 assert_eq!(a, "to 3");
-                let b: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[1].clone())
-                    .unwrap();
+                let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
                 assert_eq!(b, "1 to 3");
 
                 // タスクの処理
@@ -197,23 +181,19 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[0].clone(), "3 to 4")
+                    .store(&self_.outputs()[0], "3 to 4")
                     .unwrap();
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[1].clone(), "3 to 5")
+                    .store(&self_.outputs()[1], "3 to 5")
                     .unwrap();
             })
         }));
         let node4 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
-                let a: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[0].clone())
-                    .unwrap();
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
                 assert_eq!(a, "3 to 4");
 
                 // タスクの処理
@@ -222,30 +202,18 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[0].clone(), "4 to 5")
+                    .store(&self_.outputs()[0], "4 to 5")
                     .unwrap();
             })
         }));
         let node5 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
-                let a: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[0].clone())
-                    .unwrap();
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
                 assert_eq!(a, "2 to 5");
-                let b: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[1].clone())
-                    .unwrap();
+                let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
                 assert_eq!(b, "3 to 5");
-                let c: &str = registry
-                    .lock()
-                    .await
-                    .take(self_.inputs()[2].clone())
-                    .unwrap();
+                let c: &str = registry.lock().await.take(&self_.inputs()[2]).unwrap();
                 assert_eq!(c, "4 to 5");
 
                 // タスクの処理
@@ -254,7 +222,7 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(self_.outputs()[0].clone(), "5 to")
+                    .store(&self_.outputs()[0], "5 to")
                     .unwrap();
             })
         }));
