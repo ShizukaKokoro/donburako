@@ -132,4 +132,151 @@ mod tests {
         let workflow = builder.build();
         assert_eq!(workflow.nodes.len(), 3);
     }
+
+    #[tokio::test]
+    async fn test_big_workflow() {
+        let node1 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[0].clone())
+                    .unwrap();
+                assert_eq!(a, "to 1");
+
+                // タスクの処理
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[0].clone(), "1 to 3")
+                    .unwrap();
+            })
+        }));
+        let node2 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[0].clone())
+                    .unwrap();
+                assert_eq!(a, "to 2");
+
+                // タスクの処理
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[0].clone(), "2 to 5")
+                    .unwrap();
+            })
+        }));
+        let node3 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[0].clone())
+                    .unwrap();
+                assert_eq!(a, "to 3");
+                let b: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[1].clone())
+                    .unwrap();
+                assert_eq!(b, "1 to 3");
+
+                // タスクの処理
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[0].clone(), "3 to 4")
+                    .unwrap();
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[1].clone(), "3 to 5")
+                    .unwrap();
+            })
+        }));
+        let node4 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[0].clone())
+                    .unwrap();
+                assert_eq!(a, "3 to 4");
+
+                // タスクの処理
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[0].clone(), "4 to 5")
+                    .unwrap();
+            })
+        }));
+        let node5 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[0].clone())
+                    .unwrap();
+                assert_eq!(a, "2 to 5");
+                let b: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[1].clone())
+                    .unwrap();
+                assert_eq!(b, "3 to 5");
+                let c: &str = registry
+                    .lock()
+                    .await
+                    .take(self_.inputs()[2].clone())
+                    .unwrap();
+                assert_eq!(c, "4 to 5");
+
+                // タスクの処理
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(self_.outputs()[0].clone(), "5 to")
+                    .unwrap();
+            })
+        }));
+
+        let builder = WorkflowBuilder::default()
+            .add_node(node1)
+            .add_node(node2)
+            .add_node(node3)
+            .add_node(node4)
+            .add_node(node5)
+            .finish_nodes()
+            .add_edge::<&str>(None, Some(0))
+            .add_edge::<&str>(None, Some(1))
+            .add_edge::<&str>(None, Some(2))
+            .add_edge::<&str>(Some(0), Some(2))
+            .add_edge::<&str>(Some(1), Some(4))
+            .add_edge::<&str>(Some(2), Some(3))
+            .add_edge::<&str>(Some(2), Some(4))
+            .add_edge::<&str>(Some(3), Some(4))
+            .add_edge::<&str>(Some(4), None);
+
+        let rg = Arc::new(Mutex::new(Registry::default()));
+        let wf = builder.build();
+    }
 }
