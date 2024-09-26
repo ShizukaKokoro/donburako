@@ -74,5 +74,6 @@
 mod edge;
 mod graph;
 pub mod node;
+pub mod processor;
 mod registry;
 pub mod workflow;
