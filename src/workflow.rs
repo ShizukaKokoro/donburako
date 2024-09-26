@@ -153,21 +153,10 @@ mod tests {
                     // どこからかデータを取得する
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "0 to 1")
-                        .unwrap();
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[1], "0 to 2")
-                        .unwrap();
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[2], "0 to 3")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "0 to 1").unwrap();
+                    rg.store(&self_.outputs()[1], "0 to 2").unwrap();
+                    rg.store(&self_.outputs()[2], "0 to 3").unwrap();
                 })
             }),
             false,
@@ -176,17 +165,16 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "0 to 1");
+                    drop(rg);
 
                     // タスクの処理
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "1 to 3")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "1 to 3").unwrap();
                 })
             }),
             false,
@@ -195,17 +183,16 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "0 to 2");
+                    drop(rg);
 
                     // タスクの処理
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "2 to 5")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "2 to 5").unwrap();
                 })
             }),
             false,
@@ -214,24 +201,19 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "0 to 3");
-                    let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
+                    let b: &str = rg.take(&self_.inputs()[1]).unwrap();
                     assert_eq!(b, "1 to 3");
+                    drop(rg);
 
                     // タスクの処理
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "3 to 4")
-                        .unwrap();
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[1], "3 to 5")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "3 to 4").unwrap();
+                    rg.store(&self_.outputs()[1], "3 to 5").unwrap();
                 })
             }),
             false,
@@ -240,17 +222,16 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "3 to 4");
+                    drop(rg);
 
                     // タスクの処理
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "4 to 5")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "4 to 5").unwrap();
                 })
             }),
             false,
@@ -259,21 +240,20 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "2 to 5");
-                    let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
+                    let b: &str = rg.take(&self_.inputs()[1]).unwrap();
                     assert_eq!(b, "3 to 5");
-                    let c: &str = registry.lock().await.take(&self_.inputs()[2]).unwrap();
+                    let c: &str = rg.take(&self_.inputs()[2]).unwrap();
                     assert_eq!(c, "4 to 5");
+                    drop(rg);
 
                     // タスクの処理
 
                     // 結果の格納
-                    registry
-                        .lock()
-                        .await
-                        .store(&self_.outputs()[0], "5 to 6")
-                        .unwrap();
+                    let mut rg = registry.lock().await;
+                    rg.store(&self_.outputs()[0], "5 to 6").unwrap();
                 })
             }),
             false,
@@ -282,8 +262,10 @@ mod tests {
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
-                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    let mut rg = registry.lock().await;
+                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "5 to 6");
+                    drop(rg);
 
                     // タスクの処理
                     // どこかにデータを送信する
@@ -317,22 +299,32 @@ mod tests {
         let wf = builder.build();
         wf.start(&rg).await;
         let (t0, task0) = wf.get_next(&rg).await.unwrap();
-        task0.run(&rg).await;
+        let f0 = task0.run(&rg);
+        f0.await;
         wf.done(t0, &rg).await;
         let (t1, task1) = wf.get_next(&rg).await.unwrap();
+        let f1 = task1.run(&rg);
         let (t2, task2) = wf.get_next(&rg).await.unwrap();
-        task1.run(&rg).await;
+        let f2 = task2.run(&rg);
+        f1.await;
         wf.done(t1, &rg).await;
         let (t3, task3) = wf.get_next(&rg).await.unwrap();
-        task3.run(&rg).await;
+        let f3 = task3.run(&rg);
+        f3.await;
         wf.done(t3, &rg).await;
         let (t4, task4) = wf.get_next(&rg).await.unwrap();
-        task4.run(&rg).await;
+        let f4 = task4.run(&rg);
+        f4.await;
         wf.done(t4, &rg).await;
-        task2.run(&rg).await;
+        f2.await;
         wf.done(t2, &rg).await;
         let (t5, task5) = wf.get_next(&rg).await.unwrap();
-        task5.run(&rg).await;
+        let f5 = task5.run(&rg);
+        f5.await;
         wf.done(t5, &rg).await;
+        let (t6, task6) = wf.get_next(&rg).await.unwrap();
+        let f6 = task6.run(&rg);
+        f6.await;
+        wf.done(t6, &rg).await;
     }
 }
