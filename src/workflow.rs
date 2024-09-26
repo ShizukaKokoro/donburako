@@ -64,16 +64,9 @@ impl WorkflowBuilder {
     /// # Panics
     ///
     /// ノードの追加が終了していない場合、パニックする。
-    pub fn add_edge<T: 'static + Send + Sync>(
-        mut self,
-        from: usize,
-        to: usize,
-        edge: &Arc<Edge>,
-    ) -> Self {
-        if !edge.check_type::<T>() {
-            panic!("Type mismatch");
-        }
+    pub fn add_edge<T: 'static + Send + Sync>(mut self, from: usize, to: usize) -> Self {
         self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+        let edge = Arc::new(Edge::new::<T>());
         self.nodes[from].add_output(edge.clone());
         self.nodes[to].add_input(edge.clone());
         self
@@ -139,15 +132,13 @@ mod tests {
         let node1 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
         let node2 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
         let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
-        let edge1to2 = Arc::new(Edge::new::<i32>());
-        let edge2to3 = Arc::new(Edge::new::<i32>());
         let builder = WorkflowBuilder::default()
             .add_node(node1)
             .add_node(node2)
             .add_node(node3)
             .finish_nodes()
-            .add_edge::<i32>(0, 1, &edge1to2)
-            .add_edge::<i32>(1, 2, &edge2to3);
+            .add_edge::<i32>(0, 1)
+            .add_edge::<i32>(1, 2);
         let workflow = builder.build();
         assert_eq!(workflow.nodes.len(), 3);
     }
@@ -282,15 +273,6 @@ mod tests {
                 // 結果の格納
             })
         }));
-        let edge_0to1 = Arc::new(Edge::new::<&str>());
-        let edge_0to2 = Arc::new(Edge::new::<&str>());
-        let edge_0to3 = Arc::new(Edge::new::<&str>());
-        let edge_1to3 = Arc::new(Edge::new::<&str>());
-        let edge_2to5 = Arc::new(Edge::new::<&str>());
-        let edge_3to4 = Arc::new(Edge::new::<&str>());
-        let edge_3to5 = Arc::new(Edge::new::<&str>());
-        let edge_4to5 = Arc::new(Edge::new::<&str>());
-        let edge_5to6 = Arc::new(Edge::new::<&str>());
 
         let builder = WorkflowBuilder::default()
             .add_node(node0)
@@ -301,15 +283,15 @@ mod tests {
             .add_node(node5)
             .add_node(node6)
             .finish_nodes()
-            .add_edge::<&str>(0, 1, &edge_0to1)
-            .add_edge::<&str>(0, 2, &edge_0to2)
-            .add_edge::<&str>(0, 3, &edge_0to3)
-            .add_edge::<&str>(1, 3, &edge_1to3)
-            .add_edge::<&str>(2, 5, &edge_2to5)
-            .add_edge::<&str>(3, 4, &edge_3to4)
-            .add_edge::<&str>(3, 5, &edge_3to5)
-            .add_edge::<&str>(4, 5, &edge_4to5)
-            .add_edge::<&str>(5, 6, &edge_5to6);
+            .add_edge::<&str>(0, 1)
+            .add_edge::<&str>(0, 2)
+            .add_edge::<&str>(0, 3)
+            .add_edge::<&str>(1, 3)
+            .add_edge::<&str>(2, 5)
+            .add_edge::<&str>(3, 4)
+            .add_edge::<&str>(3, 5)
+            .add_edge::<&str>(4, 5)
+            .add_edge::<&str>(5, 6);
 
         let rg = Arc::new(Mutex::new(Registry::default()));
         let wf = builder.build();
