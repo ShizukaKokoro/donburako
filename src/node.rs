@@ -19,10 +19,19 @@ pub trait Node: 'static + std::fmt::Debug + Send + Sync {
 pub mod dummy {
     use super::*;
 
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct NodeDummy {
         inputs: Vec<Arc<Edge>>,
         outputs: Vec<Arc<Edge>>,
+    }
+    impl NodeDummy {
+        pub fn add_input(&mut self, edge: Arc<Edge>) {
+            self.inputs.push(edge);
+        }
+
+        pub fn add_output(&mut self, edge: Arc<Edge>) {
+            self.outputs.push(edge);
+        }
     }
     #[async_trait]
     impl Node for NodeDummy {
