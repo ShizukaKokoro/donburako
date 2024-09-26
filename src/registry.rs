@@ -108,7 +108,11 @@ mod tests {
         let mut registry = Registry::default();
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(edge.clone(), 42).unwrap();
-        let node = DummyNodeBuilder::new().add_input(edge).build();
+        let node = {
+            let mut builder = DummyNodeBuilder::new();
+            builder.add_input(edge);
+            builder.build()
+        };
         let res = registry.check(&node).await;
         assert!(res);
     }
