@@ -88,7 +88,7 @@ impl Graph {
         end.unwrap()
     }
 
-    pub(crate) fn check_start_end(&self) {
+    pub fn check_start_end(&self) {
         if !self.check_valid_path(self.get_start(), self.get_end()) {
             panic!("No path from start to end");
         }

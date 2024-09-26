@@ -74,7 +74,7 @@ impl Node {
     }
 
     /// ノードを実行する
-    pub async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+    pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         (self.func)(self, registry).await;
     }
 }

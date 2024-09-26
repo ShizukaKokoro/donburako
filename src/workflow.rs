@@ -3,12 +3,11 @@
 //! ワークフローは、複数のステップからなる処理の流れを表現するための構造体。
 //! これは必ずイミュータブルな構造体であり、ビルダーを用いて構築する。
 
-use crate::edge::{self, Edge};
+use crate::edge::Edge;
 use crate::graph::Graph;
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
-use std::thread::panicking;
 use tokio::sync::Mutex;
 
 /// ワークフロービルダー
@@ -293,7 +292,7 @@ mod tests {
             .add_edge::<&str>(4, 5)
             .add_edge::<&str>(5, 6);
 
-        let rg = Arc::new(Mutex::new(Registry::default()));
+        let rg = Arc::new(Mutex::new(Registry::new()));
         let wf = builder.build();
         wf.start(&rg).await;
         let (t0, task0) = wf.get_next(&rg).await.unwrap();
