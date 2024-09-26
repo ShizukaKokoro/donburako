@@ -21,7 +21,7 @@ pub struct Registry {
     queue: VecDeque<usize>,
 }
 impl Registry {
-    fn store<T: 'static + Send + Sync>(
+    pub fn store<T: 'static + Send + Sync>(
         &mut self,
         edge: &Edge,
         data: T,
@@ -33,7 +33,7 @@ impl Registry {
         Ok(())
     }
 
-    fn take<T: 'static + Send + Sync>(&mut self, edge: &Edge) -> Result<T, RegistryError> {
+    pub fn take<T: 'static + Send + Sync>(&mut self, edge: &Edge) -> Result<T, RegistryError> {
         if !edge.check_type::<T>() {
             return Err(RegistryError::TypeMismatch);
         }
@@ -42,7 +42,7 @@ impl Registry {
     }
 
     /*
-    async fn check(&self, node: &dyn Task) -> bool {
+    pub async fn check(&self, node: &dyn Task) -> bool {
         for input in node.inputs().await {
             if !self.data.contains_key(&input.edge_id) {
                 return false;
@@ -51,11 +51,11 @@ impl Registry {
         true
     } */
 
-    fn enqueue(&mut self, node_index: usize) {
+    pub fn enqueue(&mut self, node_index: usize) {
         self.queue.push_back(node_index);
     }
 
-    fn dequeue(&mut self) -> Option<usize> {
+    pub fn dequeue(&mut self) -> Option<usize> {
         self.queue.pop_front()
     }
 }
