@@ -10,6 +10,7 @@ pub enum GraphError {
     InvalidPath,
 }
 
+#[derive(Debug)]
 pub struct Graph(Vec<Vec<usize>>);
 impl Graph {
     pub fn new(size: usize) -> Self {
@@ -46,6 +47,20 @@ impl Graph {
         }
         false
     }
+
+    pub fn get_start(&self) -> Vec<usize> {
+        let mut start = vec![true; self.0.len()];
+        for edges in &self.0 {
+            for &edge in edges {
+                start[edge] = false;
+            }
+        }
+        start
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &is_start)| if is_start { Some(index) } else { None })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -58,5 +73,13 @@ mod tests {
         assert!(graph.add_edge(0, 1).is_ok());
         assert!(graph.add_edge(1, 2).is_ok());
         assert!(graph.add_edge(2, 0).is_err());
+    }
+
+    #[test]
+    fn test_get_start() {
+        let mut graph = Graph::new(3);
+        graph.add_edge(0, 1).unwrap();
+        graph.add_edge(1, 2).unwrap();
+        assert_eq!(graph.get_start(), vec![0]);
     }
 }
