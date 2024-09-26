@@ -102,7 +102,7 @@ pub(crate) struct Workflow {
     graph: Graph,
 }
 impl Workflow {
-    async fn start(&self, registry: &Arc<Mutex<Registry>>) {
+    pub(crate) async fn start(&self, registry: &Arc<Mutex<Registry>>) {
         let mut rg = registry.lock().await;
         let index = self.graph.get_start();
         let node = self.nodes.get(index).unwrap();
@@ -111,14 +111,14 @@ impl Workflow {
         }
     }
 
-    async fn get_next(&self, registry: &Arc<Mutex<Registry>>) -> Option<(usize, &Node)> {
+    pub(crate) async fn get_next(&self, registry: &Arc<Mutex<Registry>>) -> Option<(usize, &Node)> {
         if let Some(index) = registry.lock().await.dequeue() {
             return Some((index, self.nodes.get(index).unwrap()));
         }
         None
     }
 
-    async fn done(&self, task_index: usize, registry: &Arc<Mutex<Registry>>) -> bool {
+    pub(crate) async fn done(&self, task_index: usize, registry: &Arc<Mutex<Registry>>) -> bool {
         let children = self.graph.children(task_index);
         if children.is_empty() {
             return true;
