@@ -128,9 +128,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow() {
-        let node1 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
-        let node2 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
-        let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
+        let node1 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
+        let node2 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
+        let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
         let builder = WorkflowBuilder::default()
             .add_node(node1)
             .add_node(node2)
@@ -144,134 +144,155 @@ mod tests {
 
     #[tokio::test]
     async fn test_big_workflow() {
-        let node0 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
+        let node0 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
 
-                // タスクの処理
-                // どこからかデータを取得する
+                    // タスクの処理
+                    // どこからかデータを取得する
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "0 to 1")
-                    .unwrap();
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[1], "0 to 2")
-                    .unwrap();
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[2], "0 to 3")
-                    .unwrap();
-            })
-        }));
-        let node1 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "0 to 1");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "0 to 1")
+                        .unwrap();
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[1], "0 to 2")
+                        .unwrap();
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[2], "0 to 3")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node1 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "0 to 1");
 
-                // タスクの処理
+                    // タスクの処理
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "1 to 3")
-                    .unwrap();
-            })
-        }));
-        let node2 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "0 to 2");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "1 to 3")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node2 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "0 to 2");
 
-                // タスクの処理
+                    // タスクの処理
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "2 to 5")
-                    .unwrap();
-            })
-        }));
-        let node3 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "0 to 3");
-                let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
-                assert_eq!(b, "1 to 3");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "2 to 5")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node3 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "0 to 3");
+                    let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
+                    assert_eq!(b, "1 to 3");
 
-                // タスクの処理
+                    // タスクの処理
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "3 to 4")
-                    .unwrap();
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[1], "3 to 5")
-                    .unwrap();
-            })
-        }));
-        let node4 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "3 to 4");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "3 to 4")
+                        .unwrap();
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[1], "3 to 5")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node4 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "3 to 4");
 
-                // タスクの処理
+                    // タスクの処理
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "4 to 5")
-                    .unwrap();
-            })
-        }));
-        let node5 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "2 to 5");
-                let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
-                assert_eq!(b, "3 to 5");
-                let c: &str = registry.lock().await.take(&self_.inputs()[2]).unwrap();
-                assert_eq!(c, "4 to 5");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "4 to 5")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node5 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "2 to 5");
+                    let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
+                    assert_eq!(b, "3 to 5");
+                    let c: &str = registry.lock().await.take(&self_.inputs()[2]).unwrap();
+                    assert_eq!(c, "4 to 5");
 
-                // タスクの処理
+                    // タスクの処理
 
-                // 結果の格納
-                registry
-                    .lock()
-                    .await
-                    .store(&self_.outputs()[0], "5 to 6")
-                    .unwrap();
-            })
-        }));
-        let node6 = NodeBuilder::new(Box::new(|self_, registry| {
-            Box::pin(async {
-                // 引数の取得
-                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "5 to 6");
+                    // 結果の格納
+                    registry
+                        .lock()
+                        .await
+                        .store(&self_.outputs()[0], "5 to 6")
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let node6 = NodeBuilder::new(
+            Box::new(|self_, registry| {
+                Box::pin(async {
+                    // 引数の取得
+                    let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                    assert_eq!(a, "5 to 6");
 
-                // タスクの処理
-                // どこかにデータを送信する
+                    // タスクの処理
+                    // どこかにデータを送信する
 
-                // 結果の格納
-            })
-        }));
+                    // 結果の格納
+                })
+            }),
+            false,
+        );
 
         let builder = WorkflowBuilder::default()
             .add_node(node0)

@@ -20,6 +20,7 @@ pub struct NodeBuilder {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
+    is_blocking: bool,
 }
 impl NodeBuilder {
     /// 新しいノードビルダーを生成する
@@ -27,11 +28,12 @@ impl NodeBuilder {
     /// # Arguments
     ///
     /// * `func` - ノードの処理を行う関数(非同期)
-    pub fn new(func: Box<AsyncFn>) -> Self {
+    pub fn new(func: Box<AsyncFn>, is_blocking: bool) -> Self {
         Self {
             inputs: Vec::new(),
             outputs: Vec::new(),
             func,
+            is_blocking,
         }
     }
 
@@ -50,6 +52,7 @@ impl NodeBuilder {
             inputs: self.inputs,
             outputs: self.outputs,
             func: self.func,
+            is_blocking: self.is_blocking,
         }
     }
 }
@@ -61,6 +64,7 @@ pub struct Node {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
+    pub(crate) is_blocking: bool,
 }
 impl Node {
     /// ノードの入力エッジを取得する
@@ -139,6 +143,7 @@ pub mod dummy {
                             .unwrap();
                     })
                 }),
+                is_blocking: false,
             }
         }
     }
