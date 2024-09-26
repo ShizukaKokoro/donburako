@@ -3,11 +3,12 @@
 //! ワークフローは、複数のステップからなる処理の流れを表現するための構造体。
 //! これは必ずイミュータブルな構造体であり、ビルダーを用いて構築する。
 
-use crate::edge::Edge;
+use crate::edge::{self, Edge};
 use crate::graph::Graph;
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
+use std::thread::panicking;
 use tokio::sync::Mutex;
 
 /// ワークフロービルダー
@@ -65,26 +66,28 @@ impl WorkflowBuilder {
     /// ノードの追加が終了していない場合、パニックする。
     pub fn add_edge<T: 'static + Send + Sync>(
         mut self,
-        from: Option<usize>,
-        to: Option<usize>,
+        from: usize,
+        to: usize,
+        edge: &Arc<Edge>,
     ) -> Self {
-        if let (Some(from), Some(to)) = (from, to) {
-            self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+        if !edge.check_type::<T>() {
+            panic!("Type mismatch");
         }
-        let edge = Arc::new(Edge::new::<T>());
-        if let Some(from) = from {
-            self.nodes[from].add_output(edge.clone());
-        }
-        if let Some(to) = to {
-            self.nodes[to].add_input(edge.clone());
-        }
+        self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+        self.nodes[from].add_output(edge.clone());
+        self.nodes[to].add_input(edge.clone());
         self
     }
 
     fn build(self) -> Workflow {
-        Workflow {
-            nodes: self.nodes.into_iter().map(|node| node.build()).collect(),
-            graph: self.graph.unwrap(),
+        if let Some(graph) = self.graph {
+            graph.check_start_end();
+            Workflow {
+                nodes: self.nodes.into_iter().map(|node| node.build()).collect(),
+                graph,
+            }
+        } else {
+            panic!("Graph is not built");
         }
     }
 }
@@ -95,6 +98,15 @@ struct Workflow {
     graph: Graph,
 }
 impl Workflow {
+    async fn start(&self, registry: &Arc<Mutex<Registry>>) {
+        let mut rg = registry.lock().await;
+        let index = self.graph.get_start();
+        let node = self.nodes.get(index).unwrap();
+        if rg.check(node) {
+            rg.enqueue(index);
+        }
+    }
+
     async fn get_next(&self, registry: &Arc<Mutex<Registry>>) -> Option<(usize, &Node)> {
         if let Some(index) = registry.lock().await.dequeue() {
             return Some((index, self.nodes.get(index).unwrap()));
@@ -102,14 +114,19 @@ impl Workflow {
         None
     }
 
-    async fn done(&self, task_index: usize, registry: Arc<Mutex<Registry>>) {
+    async fn done(&self, task_index: usize, registry: &Arc<Mutex<Registry>>) -> bool {
+        let children = self.graph.children(task_index);
+        if children.is_empty() {
+            return true;
+        }
+        let mut rg = registry.lock().await;
         for next_index in self.graph.children(task_index) {
             let nt = self.nodes.get(*next_index).unwrap();
-            let mut rg = registry.lock().await;
             if rg.check(nt) {
                 rg.enqueue(*next_index);
             }
         }
+        false
     }
 }
 
@@ -122,24 +139,51 @@ mod tests {
         let node1 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
         let node2 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
         let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})));
+        let edge1to2 = Arc::new(Edge::new::<i32>());
+        let edge2to3 = Arc::new(Edge::new::<i32>());
         let builder = WorkflowBuilder::default()
             .add_node(node1)
             .add_node(node2)
             .add_node(node3)
             .finish_nodes()
-            .add_edge::<i32>(Some(0), Some(1))
-            .add_edge::<i32>(Some(1), Some(2));
+            .add_edge::<i32>(0, 1, &edge1to2)
+            .add_edge::<i32>(1, 2, &edge2to3);
         let workflow = builder.build();
         assert_eq!(workflow.nodes.len(), 3);
     }
 
     #[tokio::test]
     async fn test_big_workflow() {
+        let node0 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+
+                // タスクの処理
+                // どこからかデータを取得する
+
+                // 結果の格納
+                registry
+                    .lock()
+                    .await
+                    .store(&self_.outputs()[0], "0 to 1")
+                    .unwrap();
+                registry
+                    .lock()
+                    .await
+                    .store(&self_.outputs()[1], "0 to 2")
+                    .unwrap();
+                registry
+                    .lock()
+                    .await
+                    .store(&self_.outputs()[2], "0 to 3")
+                    .unwrap();
+            })
+        }));
         let node1 = NodeBuilder::new(Box::new(|self_, registry| {
             Box::pin(async {
                 // 引数の取得
                 let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "to 1");
+                assert_eq!(a, "0 to 1");
 
                 // タスクの処理
 
@@ -155,7 +199,7 @@ mod tests {
             Box::pin(async {
                 // 引数の取得
                 let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "to 2");
+                assert_eq!(a, "0 to 2");
 
                 // タスクの処理
 
@@ -171,7 +215,7 @@ mod tests {
             Box::pin(async {
                 // 引数の取得
                 let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
-                assert_eq!(a, "to 3");
+                assert_eq!(a, "0 to 3");
                 let b: &str = registry.lock().await.take(&self_.inputs()[1]).unwrap();
                 assert_eq!(b, "1 to 3");
 
@@ -222,29 +266,71 @@ mod tests {
                 registry
                     .lock()
                     .await
-                    .store(&self_.outputs()[0], "5 to")
+                    .store(&self_.outputs()[0], "5 to 6")
                     .unwrap();
             })
         }));
+        let node6 = NodeBuilder::new(Box::new(|self_, registry| {
+            Box::pin(async {
+                // 引数の取得
+                let a: &str = registry.lock().await.take(&self_.inputs()[0]).unwrap();
+                assert_eq!(a, "5 to 6");
+
+                // タスクの処理
+                // どこかにデータを送信する
+
+                // 結果の格納
+            })
+        }));
+        let edge_0to1 = Arc::new(Edge::new::<&str>());
+        let edge_0to2 = Arc::new(Edge::new::<&str>());
+        let edge_0to3 = Arc::new(Edge::new::<&str>());
+        let edge_1to3 = Arc::new(Edge::new::<&str>());
+        let edge_2to5 = Arc::new(Edge::new::<&str>());
+        let edge_3to4 = Arc::new(Edge::new::<&str>());
+        let edge_3to5 = Arc::new(Edge::new::<&str>());
+        let edge_4to5 = Arc::new(Edge::new::<&str>());
+        let edge_5to6 = Arc::new(Edge::new::<&str>());
 
         let builder = WorkflowBuilder::default()
+            .add_node(node0)
             .add_node(node1)
             .add_node(node2)
             .add_node(node3)
             .add_node(node4)
             .add_node(node5)
+            .add_node(node6)
             .finish_nodes()
-            .add_edge::<&str>(None, Some(0))
-            .add_edge::<&str>(None, Some(1))
-            .add_edge::<&str>(None, Some(2))
-            .add_edge::<&str>(Some(0), Some(2))
-            .add_edge::<&str>(Some(1), Some(4))
-            .add_edge::<&str>(Some(2), Some(3))
-            .add_edge::<&str>(Some(2), Some(4))
-            .add_edge::<&str>(Some(3), Some(4))
-            .add_edge::<&str>(Some(4), None);
+            .add_edge::<&str>(0, 1, &edge_0to1)
+            .add_edge::<&str>(0, 2, &edge_0to2)
+            .add_edge::<&str>(0, 3, &edge_0to3)
+            .add_edge::<&str>(1, 3, &edge_1to3)
+            .add_edge::<&str>(2, 5, &edge_2to5)
+            .add_edge::<&str>(3, 4, &edge_3to4)
+            .add_edge::<&str>(3, 5, &edge_3to5)
+            .add_edge::<&str>(4, 5, &edge_4to5)
+            .add_edge::<&str>(5, 6, &edge_5to6);
 
         let rg = Arc::new(Mutex::new(Registry::default()));
         let wf = builder.build();
+        wf.start(&rg).await;
+        let (t0, task0) = wf.get_next(&rg).await.unwrap();
+        task0.run(&rg).await;
+        wf.done(t0, &rg).await;
+        let (t1, task1) = wf.get_next(&rg).await.unwrap();
+        let (t2, task2) = wf.get_next(&rg).await.unwrap();
+        task1.run(&rg).await;
+        wf.done(t1, &rg).await;
+        let (t3, task3) = wf.get_next(&rg).await.unwrap();
+        task3.run(&rg).await;
+        wf.done(t3, &rg).await;
+        let (t4, task4) = wf.get_next(&rg).await.unwrap();
+        task4.run(&rg).await;
+        wf.done(t4, &rg).await;
+        task2.run(&rg).await;
+        wf.done(t2, &rg).await;
+        let (t5, task5) = wf.get_next(&rg).await.unwrap();
+        task5.run(&rg).await;
+        wf.done(t5, &rg).await;
     }
 }
