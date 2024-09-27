@@ -43,6 +43,7 @@ impl Processor {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
         let handle = spawn(async move {
+            // TODO: レジストリを VecDeque<Option<_>> で管理する
             let mut rgs: HashMap<RegistryID, Arc<Mutex<Registry>>> = HashMap::new();
             let mut handles: Vec<Option<JoinHandle<()>>> = Vec::with_capacity(n);
             let mut retains = {
@@ -60,7 +61,26 @@ impl Processor {
                     workflow[&wf_id].start(&rg).await;
                 }
 
-                //TODO: 次のノードを取得し、実行し、 handles にいれる。(retains を用いて空きスペースに入れる)
+                // TODO: 次のノードを取得し、実行し、 handles にいれる。(retains を用いて空きスペースに入れる)
+                /*
+                rgs.push_back(None); // キューの最後をマーク
+                while let Some(rg) = // 各レジストリに対して {
+                    if rg.is_none() {
+                        break;
+                    }
+                    let wf = // レジストリの実行しているワークフローを取得
+                    if !retains.is_empty() {
+                        if let Some((task_index, node)) = wf.get_next(&rg) {
+                            let index = retains.pop_front().unwrap();
+                            let handle = if node.is_blocking() { // ブロッキングノードの実行
+                            } else { // 非同期ノードの実行
+                            };
+                            handles[index] = Some(handle);
+                        }
+                    }
+                    rgs.push_back(rg);
+                }
+                */
 
                 for (key, item) in handles.iter_mut().enumerate().take(n) {
                     if let Some(handle) = item {
@@ -71,7 +91,13 @@ impl Processor {
                                 res.unwrap(); // タスクが正常に終了したか確認
                                 *item= None; // タスクハンドルをクリア
                                 retains.push_back(key);
-                                //TODO: タスクの完了を通知
+                                // TODO: タスクの完了を通知
+                                /*
+                                let rg = // タスクに応じたレジストリを取得
+                                let wf = // タスクに応じたワークフローを取得
+                                let index = // タスクのインデックスを取得
+                                wf.done(index, &rg);
+                                */
                             }
                             // タスクが終了していない場合
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
