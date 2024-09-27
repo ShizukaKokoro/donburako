@@ -53,6 +53,7 @@ pub struct Processor {
     workflow: Arc<HashMap<WorkflowID, Arc<Workflow>>>,
 }
 impl Processor {
+    /// プロセスの開始
     pub fn run(&self, n: usize) -> (JoinHandle<()>, mpsc::Sender<WorkflowID>) {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);

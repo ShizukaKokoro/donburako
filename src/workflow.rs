@@ -76,7 +76,11 @@ impl WorkflowBuilder {
         if let Some(graph) = self.graph {
             graph.check_start_end();
             Workflow {
-                nodes: self.nodes.into_iter().map(|node| node.build()).collect(),
+                nodes: self
+                    .nodes
+                    .into_iter()
+                    .map(|node| Arc::new(node.build()))
+                    .collect(),
                 graph,
             }
         } else {
@@ -98,11 +102,11 @@ impl WorkflowID {
 
 #[derive(Debug)]
 pub(crate) struct Workflow {
-    nodes: Vec<Node>,
+    nodes: Vec<Arc<Node>>,
     graph: Graph,
 }
 impl Workflow {
-    pub(crate) fn start<'a>(&self, mut registry: MutexGuard<'a, Registry>) {
+    pub(crate) fn start(&self, mut registry: MutexGuard<Registry>) {
         let index = self.graph.get_start();
         let node = self.nodes.get(index).unwrap();
         if registry.check(node) {
@@ -110,17 +114,17 @@ impl Workflow {
         }
     }
 
-    pub(crate) fn get_next<'a>(
+    pub(crate) fn get_next(
         &self,
-        mut registry: MutexGuard<'a, Registry>,
-    ) -> Option<(usize, &Node)> {
+        mut registry: MutexGuard<Registry>,
+    ) -> Option<(usize, Arc<Node>)> {
         if let Some(index) = registry.dequeue() {
-            return Some((index, self.nodes.get(index).unwrap()));
+            return Some((index, self.nodes.get(index).unwrap().clone()));
         }
         None
     }
 
-    pub(crate) fn done<'a>(&self, task_index: usize, mut registry: MutexGuard<Registry>) -> bool {
+    pub(crate) fn done(&self, task_index: usize, mut registry: MutexGuard<Registry>) -> bool {
         let children = self.graph.children(task_index);
         if children.is_empty() {
             return true;
