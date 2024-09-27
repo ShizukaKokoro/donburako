@@ -86,6 +86,11 @@ pub mod processor;
 mod registry;
 pub mod workflow;
 
+pub use node::{Node, NodeBuilder};
+pub use processor::{Processor, ProcessorBuilder};
+pub use registry::Registry;
+pub use workflow::WorkflowBuilder;
+
 // TODO: 開発用ログの追加
 // TODO: unwrap() を Result に変更する
 // TODO: 構文拡張のために、NodeBuilder を列挙型にする
