@@ -173,8 +173,9 @@ mod tests {
                     // 結果の格納
                     let mut rg = registry.lock().await;
                     rg.store(&self_.outputs()[0], "0 to 1").unwrap();
-                    rg.store(&self_.outputs()[1], "0 to 2").unwrap();
-                    rg.store(&self_.outputs()[2], "0 to 3").unwrap();
+                    rg.store(&self_.outputs()[1], 0u8).unwrap();
+                    rg.store(&self_.outputs()[2], "0 to 2").unwrap();
+                    rg.store(&self_.outputs()[3], "0 to 3").unwrap();
                 })
             }),
             false,
@@ -186,6 +187,8 @@ mod tests {
                     let mut rg = registry.lock().await;
                     let a: &str = rg.take(&self_.inputs()[0]).unwrap();
                     assert_eq!(a, "0 to 1");
+                    let a: u8 = rg.take(&self_.inputs()[1]).unwrap();
+                    assert_eq!(a, 0u8);
                     drop(rg);
 
                     // タスクの処理
@@ -304,6 +307,7 @@ mod tests {
             .add_node(node6)
             .finish_nodes()
             .add_edge::<&str>(0, 1)
+            .add_edge::<u8>(0, 1)
             .add_edge::<&str>(0, 2)
             .add_edge::<&str>(0, 3)
             .add_edge::<&str>(1, 3)

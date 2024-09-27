@@ -19,7 +19,9 @@ impl Graph {
 
     pub fn add_edge(&mut self, from: usize, to: usize) -> Result<(), GraphError> {
         if self.check_valid_path(from, to) {
-            self.0[from].push(to);
+            if !self.0[from].contains(&to) {
+                self.0[from].push(to);
+            }
             Ok(())
         } else {
             Err(GraphError::InvalidPath)
