@@ -67,6 +67,9 @@ impl Processor {
         let handle = spawn(async move {
             let mut rgs: VecDeque<Option<(Arc<Mutex<Registry>>, WorkflowID)>> = VecDeque::new();
             let mut handles = Vec::with_capacity(n);
+            for _ in 0..n {
+                handles.push(None);
+            }
             let mut retains = {
                 let mut retains = VecDeque::new();
                 for i in 0..n {
