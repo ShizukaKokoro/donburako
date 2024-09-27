@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 use tokio::{spawn, task};
 
 /// プロセッサービルダー
+#[derive(Default)]
 pub struct ProcessorBuilder {
     workflow: Vec<WorkflowBuilder>,
 }
