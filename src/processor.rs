@@ -2,8 +2,8 @@
 //!
 //! タスクの実行やレジストリの管理を行うプロセッサーを実装するモジュール。
 
-use crate::registry::{Registry, RegistryID};
-use crate::workflow::{self, Workflow, WorkflowBuilder, WorkflowID};
+use crate::registry::Registry;
+use crate::workflow::{WorkflowBuilder, WorkflowID};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -43,8 +43,7 @@ impl Processor {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
         let handle = spawn(async move {
-            // TODO: レジストリを VecDeque<Option<_>> で管理する
-            let mut rgs: HashMap<RegistryID, Arc<Mutex<Registry>>> = HashMap::new();
+            let mut rgs: VecDeque<Option<Arc<Mutex<Registry>>>> = VecDeque::new();
             let mut handles: Vec<Option<JoinHandle<()>>> = Vec::with_capacity(n);
             let mut retains = {
                 let mut retains = VecDeque::new();
@@ -55,9 +54,8 @@ impl Processor {
             };
             loop {
                 while let Ok(wf_id) = rx.try_recv() {
-                    let id = RegistryID::new();
                     let rg = Arc::new(Mutex::new(Registry::new()));
-                    rgs.insert(id, rg.clone());
+                    rgs.push_back(Some(rg.clone()));
                     workflow[&wf_id].start(&rg).await;
                 }
 

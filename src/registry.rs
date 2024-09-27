@@ -17,14 +17,6 @@ pub enum RegistryError {
     TypeMismatch,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub(crate) struct RegistryID(Uuid);
-impl RegistryID {
-    pub fn new() -> Self {
-        RegistryID(Uuid::new_v4())
-    }
-}
-
 #[derive(Debug)]
 pub struct Registry {
     data: HashMap<EdgeId, Box<dyn Any + 'static + Send + Sync>>,
