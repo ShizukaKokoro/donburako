@@ -17,6 +17,9 @@ pub enum RegistryError {
     TypeMismatch,
 }
 
+/// レジストリ
+///
+/// ワークフローの実行中にデータを保存するためのストレージ。
 #[derive(Debug)]
 pub struct Registry {
     data: HashMap<EdgeId, Box<dyn Any + 'static + Send + Sync>>,
@@ -36,6 +39,16 @@ impl Registry {
         self.wf_id
     }
 
+    /// データの保存
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `data` - 保存するデータ
+    ///
+    /// # Errors
+    ///
+    /// エッジの型とデータの型が一致しない場合、`RegistryError::TypeMismatch`が返される。
     pub fn store<T: 'static + Send + Sync>(
         &mut self,
         edge: &Edge,
@@ -48,6 +61,15 @@ impl Registry {
         Ok(())
     }
 
+    /// データの取得
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    ///
+    /// # Errors
+    ///
+    /// エッジの型とデータの型が一致しない場合、`RegistryError::TypeMismatch`が返される。
     pub fn take<T: 'static + Send + Sync>(&mut self, edge: &Edge) -> Result<T, RegistryError> {
         if !edge.check_type::<T>() {
             return Err(RegistryError::TypeMismatch);
