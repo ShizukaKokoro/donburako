@@ -57,7 +57,7 @@ impl Registry {
         if !edge.check_type::<T>() {
             return Err(RegistryError::TypeMismatch);
         }
-        self.data.insert(edge.id(), Box::new(data));
+        assert!(self.data.insert(edge.id(), Box::new(data)).is_none());
         Ok(())
     }
 

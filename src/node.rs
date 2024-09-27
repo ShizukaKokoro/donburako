@@ -37,14 +37,12 @@ impl NodeBuilder {
         }
     }
 
-    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) -> &mut Self {
+    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
         self.inputs.push(edge);
-        self
     }
 
-    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) -> &mut Self {
+    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
         self.outputs.push(edge);
-        self
     }
 
     pub(crate) fn build(self) -> Node {

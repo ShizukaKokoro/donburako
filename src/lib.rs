@@ -77,7 +77,7 @@
 //!     - ハードタイムアウト
 //!         単にこれ以上待つようなら実行を諦めるというタイムリミット。
 
-#![warn(missing_docs, rustdoc::missing_crate_level_docs)]
+#![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
 mod edge;
 mod graph;

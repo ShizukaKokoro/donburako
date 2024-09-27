@@ -36,7 +36,7 @@ impl ProcessorBuilder {
             let mut wf_ids = Vec::new();
             for builder in self.workflow {
                 let id = WorkflowID::new();
-                workflow.insert(id, Arc::new(builder.build()));
+                assert!(workflow.insert(id, Arc::new(builder.build())).is_none());
                 wf_ids.push(id);
             }
             (workflow, wf_ids)
@@ -124,7 +124,7 @@ impl Processor {
                                 retains.push_back(key);
                                 let rg = rg.lock().await;
                                 let wf = workflow[&rg.wf_id()].clone();
-                                wf.done(task_index, rg);
+                                let finished = wf.done(task_index, rg);
                                 *item= None; // タスクハンドルをクリア
                             }
                             // タスクが終了していない場合

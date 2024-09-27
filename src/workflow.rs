@@ -323,30 +323,30 @@ mod tests {
         let (t0, task0) = wf.get_next(rg.lock().await).unwrap();
         let f0 = task0.run(&rg);
         f0.await;
-        wf.done(t0, rg.lock().await);
+        assert!(!wf.done(t0, rg.lock().await));
         let (t1, task1) = wf.get_next(rg.lock().await).unwrap();
         let f1 = task1.run(&rg);
         let (t2, task2) = wf.get_next(rg.lock().await).unwrap();
         let f2 = task2.run(&rg);
         f1.await;
-        wf.done(t1, rg.lock().await);
+        assert!(!wf.done(t1, rg.lock().await));
         let (t3, task3) = wf.get_next(rg.lock().await).unwrap();
         let f3 = task3.run(&rg);
         f3.await;
-        wf.done(t3, rg.lock().await);
+        assert!(!wf.done(t3, rg.lock().await));
         let (t4, task4) = wf.get_next(rg.lock().await).unwrap();
         let f4 = task4.run(&rg);
         f4.await;
-        wf.done(t4, rg.lock().await);
+        assert!(!wf.done(t4, rg.lock().await));
         f2.await;
-        wf.done(t2, rg.lock().await);
+        assert!(!wf.done(t2, rg.lock().await));
         let (t5, task5) = wf.get_next(rg.lock().await).unwrap();
         let f5 = task5.run(&rg);
         f5.await;
-        wf.done(t5, rg.lock().await);
+        assert!(!wf.done(t5, rg.lock().await));
         let (t6, task6) = wf.get_next(rg.lock().await).unwrap();
         let f6 = task6.run(&rg);
         f6.await;
-        wf.done(t6, rg.lock().await);
+        assert!(wf.done(t6, rg.lock().await));
     }
 }
