@@ -64,7 +64,7 @@ pub struct Node {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
-    pub(crate) is_blocking: bool,
+    is_blocking: bool,
 }
 impl Node {
     /// ノードの入力エッジを取得する
@@ -75,6 +75,11 @@ impl Node {
     /// ノードの出力エッジを取得する
     pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         &self.outputs
+    }
+
+    /// ブロッキングしているかどうかを取得する
+    pub(crate) fn is_blocking(&self) -> bool {
+        self.is_blocking
     }
 
     /// ノードを実行する

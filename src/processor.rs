@@ -7,9 +7,10 @@ use crate::workflow::{WorkflowBuilder, WorkflowID};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::spawn;
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
+use tokio::{spawn, task};
 
 /// プロセッサー
 pub struct Processor {
@@ -43,7 +44,7 @@ impl Processor {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
         let handle = spawn(async move {
-            let mut rgs: VecDeque<Option<Arc<Mutex<Registry>>>> = VecDeque::new();
+            let mut rgs: VecDeque<Option<(Arc<Mutex<Registry>>, WorkflowID)>> = VecDeque::new();
             let mut handles: Vec<Option<JoinHandle<()>>> = Vec::with_capacity(n);
             let mut retains = {
                 let mut retains = VecDeque::new();
@@ -55,30 +56,34 @@ impl Processor {
             loop {
                 while let Ok(wf_id) = rx.try_recv() {
                     let rg = Arc::new(Mutex::new(Registry::new()));
-                    rgs.push_back(Some(rg.clone()));
+                    rgs.push_back(Some((rg.clone(), wf_id)));
                     workflow[&wf_id].start(&rg).await;
                 }
 
                 // TODO: 次のノードを取得し、実行し、 handles にいれる。(retains を用いて空きスペースに入れる)
-                /*
                 rgs.push_back(None); // キューの最後をマーク
-                while let Some(rg) = // 各レジストリに対して {
-                    if rg.is_none() {
+                while let Some(item) = rgs.pop_front() {
+                    if item.is_none() {
                         break;
                     }
-                    let wf = // レジストリの実行しているワークフローを取得
+                    let (rg, wf_id) = item.unwrap();
+                    let wf = workflow[&wf_id];
                     if !retains.is_empty() {
-                        if let Some((task_index, node)) = wf.get_next(&rg) {
+                        if let Some((task_index, node)) = wf.get_next(&rg).await {
                             let index = retains.pop_front().unwrap();
-                            let handle = if node.is_blocking() { // ブロッキングノードの実行
-                            } else { // 非同期ノードの実行
+                            let handle = if !node.is_blocking() {
+                                task::spawn(async { node.run(&rg).await })
+                            } else {
+                                let rt_handle = Handle::current();
+                                task::spawn_blocking(move || {
+                                    rt_handle.block_on(async { node.run(&rg).await })
+                                })
                             };
                             handles[index] = Some(handle);
                         }
                     }
-                    rgs.push_back(rg);
+                    rgs.push_back(Some((rg, wf_id)));
                 }
-                */
 
                 for (key, item) in handles.iter_mut().enumerate().take(n) {
                     if let Some(handle) = item {
