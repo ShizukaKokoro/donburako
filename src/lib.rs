@@ -68,6 +68,14 @@
 //!
 //! ロギング、エラーハンドリング、リトライ、タイムアウトなど、ワークフローの実行に必要な機能を追加する。
 //! ループと条件分岐をサポートする。
+//!
+//! タイムアウトは2種類。
+//!     - ソフトタイムアウト
+//!         人間に頼むようなタスクや、数日かけて待ち続けるタスクは他のタスクを圧迫する。
+//!         そのため、このようなタスクは通常の短時間で確認し続けるプールからは排除し、より長時間かけてチェックするプールに転送される。
+//!         この転送されるまでのタイムリミットがソフトタイムリミット。
+//!     - ハードタイムアウト
+//!         単にこれ以上待つようなら実行を諦めるというタイムリミット。
 
 #![warn(missing_docs, rustdoc::missing_crate_level_docs)]
 
@@ -77,3 +85,13 @@ pub mod node;
 pub mod processor;
 mod registry;
 pub mod workflow;
+
+// TODO: 開発用ログの追加
+// TODO: unwrap() を Result に変更する
+// TODO: 構文拡張のために、NodeBuilder を列挙型にする
+// TODO: ユニット型をやりとりして、処理の流れを強制、固定する NodeBuilder を実装する
+// TODO: 一つでも入力されたら実行可能な NodeBuilder を実装する(データの集約のみ行う)
+// TODO: if NodeBuilder を実装する
+// TODO: タイムアウトを実装する(2種類)
+// TODO: map~collect NodeBuilder を実装する
+// TODO: reduce NodeBuilder を実装する
