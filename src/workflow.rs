@@ -8,7 +8,7 @@ use crate::graph::Graph;
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::MutexGuard;
 use uuid::Uuid;
 
 /// ワークフロービルダー
@@ -102,32 +102,33 @@ pub(crate) struct Workflow {
     graph: Graph,
 }
 impl Workflow {
-    pub(crate) async fn start(&self, registry: &Arc<Mutex<Registry>>) {
-        let mut rg = registry.lock().await;
+    pub(crate) fn start<'a>(&self, mut registry: MutexGuard<'a, Registry>) {
         let index = self.graph.get_start();
         let node = self.nodes.get(index).unwrap();
-        if rg.check(node) {
-            rg.enqueue(index);
+        if registry.check(node) {
+            registry.enqueue(index);
         }
     }
 
-    pub(crate) async fn get_next(&self, registry: &Arc<Mutex<Registry>>) -> Option<(usize, &Node)> {
-        if let Some(index) = registry.lock().await.dequeue() {
+    pub(crate) fn get_next<'a>(
+        &self,
+        mut registry: MutexGuard<'a, Registry>,
+    ) -> Option<(usize, &Node)> {
+        if let Some(index) = registry.dequeue() {
             return Some((index, self.nodes.get(index).unwrap()));
         }
         None
     }
 
-    pub(crate) async fn done(&self, task_index: usize, registry: &Arc<Mutex<Registry>>) -> bool {
+    pub(crate) fn done<'a>(&self, task_index: usize, mut registry: MutexGuard<Registry>) -> bool {
         let children = self.graph.children(task_index);
         if children.is_empty() {
             return true;
         }
-        let mut rg = registry.lock().await;
         for next_index in self.graph.children(task_index) {
             let nt = self.nodes.get(*next_index).unwrap();
-            if rg.check(nt) {
-                rg.enqueue(*next_index);
+            if registry.check(nt) {
+                registry.enqueue(*next_index);
             }
         }
         false
@@ -137,6 +138,7 @@ impl Workflow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn test_workflow() {
@@ -309,34 +311,34 @@ mod tests {
 
         let rg = Arc::new(Mutex::new(Registry::new()));
         let wf = builder.build();
-        wf.start(&rg).await;
-        let (t0, task0) = wf.get_next(&rg).await.unwrap();
+        wf.start(rg.lock().await);
+        let (t0, task0) = wf.get_next(rg.lock().await).unwrap();
         let f0 = task0.run(&rg);
         f0.await;
-        wf.done(t0, &rg).await;
-        let (t1, task1) = wf.get_next(&rg).await.unwrap();
+        wf.done(t0, rg.lock().await);
+        let (t1, task1) = wf.get_next(rg.lock().await).unwrap();
         let f1 = task1.run(&rg);
-        let (t2, task2) = wf.get_next(&rg).await.unwrap();
+        let (t2, task2) = wf.get_next(rg.lock().await).unwrap();
         let f2 = task2.run(&rg);
         f1.await;
-        wf.done(t1, &rg).await;
-        let (t3, task3) = wf.get_next(&rg).await.unwrap();
+        wf.done(t1, rg.lock().await);
+        let (t3, task3) = wf.get_next(rg.lock().await).unwrap();
         let f3 = task3.run(&rg);
         f3.await;
-        wf.done(t3, &rg).await;
-        let (t4, task4) = wf.get_next(&rg).await.unwrap();
+        wf.done(t3, rg.lock().await);
+        let (t4, task4) = wf.get_next(rg.lock().await).unwrap();
         let f4 = task4.run(&rg);
         f4.await;
-        wf.done(t4, &rg).await;
+        wf.done(t4, rg.lock().await);
         f2.await;
-        wf.done(t2, &rg).await;
-        let (t5, task5) = wf.get_next(&rg).await.unwrap();
+        wf.done(t2, rg.lock().await);
+        let (t5, task5) = wf.get_next(rg.lock().await).unwrap();
         let f5 = task5.run(&rg);
         f5.await;
-        wf.done(t5, &rg).await;
-        let (t6, task6) = wf.get_next(&rg).await.unwrap();
+        wf.done(t5, rg.lock().await);
+        let (t6, task6) = wf.get_next(rg.lock().await).unwrap();
         let f6 = task6.run(&rg);
         f6.await;
-        wf.done(t6, &rg).await;
+        wf.done(t6, rg.lock().await);
     }
 }
