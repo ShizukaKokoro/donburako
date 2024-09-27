@@ -8,6 +8,7 @@ authors.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true }
+tokio-util.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt"] }

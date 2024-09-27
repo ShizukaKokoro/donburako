@@ -11,6 +11,7 @@ use tokio::runtime::Handle;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::{spawn, task};
+use tokio_util::sync::CancellationToken;
 
 /// プロセッサービルダー
 #[derive(Default)]
@@ -60,10 +61,12 @@ impl Processor {
     }
 
     /// プロセスの開始
-    pub fn run(&self, n: usize) -> (JoinHandle<()>, mpsc::Sender<WorkflowID>) {
+    pub fn run(&self, n: usize) -> (JoinHandle<()>, mpsc::Sender<WorkflowID>, CancellationToken) {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
         let workflow = self.workflow.clone();
+        let cancel = CancellationToken::new();
+        let cancel_clone = cancel.clone();
         let handle = spawn(async move {
             let mut rgs: VecDeque<Option<Arc<Mutex<Registry>>>> = VecDeque::new();
             let mut handles = Vec::with_capacity(n);
@@ -78,6 +81,10 @@ impl Processor {
                 retains
             };
             loop {
+                if cancel_clone.is_cancelled() {
+                    break;
+                }
+
                 while let Ok(wf_id) = rx.try_recv() {
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
                     rgs.push_back(Some(rg.clone()));
@@ -134,8 +141,9 @@ impl Processor {
                         }
                     }
                 }
+                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
         });
-        (handle, tx)
+        (handle, tx, cancel)
     }
 }
