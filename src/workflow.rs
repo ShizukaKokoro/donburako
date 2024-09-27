@@ -313,7 +313,7 @@ mod tests {
             .add_edge::<&str>(4, 5)
             .add_edge::<&str>(5, 6);
 
-        let rg = Arc::new(Mutex::new(Registry::new()));
+        let rg = Arc::new(Mutex::new(Registry::new(WorkflowID::new())));
         let wf = builder.build();
         wf.start(rg.lock().await);
         let (t0, task0) = wf.get_next(rg.lock().await).unwrap();

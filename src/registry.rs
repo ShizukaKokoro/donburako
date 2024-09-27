@@ -6,10 +6,10 @@
 
 use crate::edge::{Edge, EdgeId};
 use crate::node::Node;
+use crate::workflow::WorkflowID;
 use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
-use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum RegistryError {
@@ -21,13 +21,19 @@ pub enum RegistryError {
 pub struct Registry {
     data: HashMap<EdgeId, Box<dyn Any + 'static + Send + Sync>>,
     queue: VecDeque<usize>,
+    wf_id: WorkflowID,
 }
 impl Registry {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(wf_id: WorkflowID) -> Self {
         Self {
             data: HashMap::new(),
             queue: VecDeque::new(),
+            wf_id,
         }
+    }
+
+    pub(crate) fn wf_id(&self) -> WorkflowID {
+        self.wf_id
     }
 
     pub fn store<T: 'static + Send + Sync>(
@@ -76,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_store() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         assert_eq!(registry.data.len(), 1);
@@ -84,7 +90,7 @@ mod tests {
 
     #[test]
     fn test_take() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let data: i32 = registry.take(&edge).unwrap();
@@ -94,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_store_type_mismatch() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let res = registry.store(&edge, "test");
@@ -103,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_take_type_mismatch() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let res = registry.take::<String>(&edge);
@@ -112,7 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let node = {
@@ -126,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_queue() {
-        let mut registry = Registry::new();
+        let mut registry = Registry::new(WorkflowID::new());
         registry.enqueue(0);
         registry.enqueue(1);
         assert_eq!(registry.dequeue(), Some(0));
