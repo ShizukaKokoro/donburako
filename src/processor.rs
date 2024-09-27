@@ -65,7 +65,7 @@ impl Processor {
             mpsc::channel(16);
         let workflow = self.workflow.clone();
         let handle = spawn(async move {
-            let mut rgs: VecDeque<Option<(Arc<Mutex<Registry>>, WorkflowID)>> = VecDeque::new();
+            let mut rgs: VecDeque<Option<Arc<Mutex<Registry>>>> = VecDeque::new();
             let mut handles = Vec::with_capacity(n);
             for _ in 0..n {
                 handles.push(None);
@@ -80,7 +80,7 @@ impl Processor {
             loop {
                 while let Ok(wf_id) = rx.try_recv() {
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
-                    rgs.push_back(Some((rg.clone(), wf_id)));
+                    rgs.push_back(Some(rg.clone()));
                     workflow[&wf_id].start(rg.lock().await);
                 }
 
@@ -89,7 +89,8 @@ impl Processor {
                     if item.is_none() {
                         break;
                     }
-                    let (rg, wf_id) = item.unwrap();
+                    let rg = item.unwrap();
+                    let wf_id = rg.lock().await.wf_id();
                     let wf = workflow[&wf_id].clone();
                     let rg_clone = rg.clone();
                     if !retains.is_empty() {
@@ -110,7 +111,7 @@ impl Processor {
                             handles[index] = Some((handle, rg_clone.clone()));
                         }
                     }
-                    rgs.push_back(Some((rg_clone, wf_id)));
+                    rgs.push_back(Some(rg_clone));
                 }
 
                 for (key, item) in handles.iter_mut().enumerate().take(n) {
