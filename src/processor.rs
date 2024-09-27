@@ -3,7 +3,7 @@
 //! タスクの実行やレジストリの管理を行うプロセッサーを実装するモジュール。
 
 use crate::registry::Registry;
-use crate::workflow::{Workflow, WorkflowBuilder, WorkflowID};
+use crate::workflow::{WorkflowBuilder, WorkflowID};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ impl ProcessorBuilder {
     }
 
     /// ビルド
-    pub fn build(self) -> Processor {
+    pub fn build(self, n: usize) -> Processor {
         let (workflow, wf_ids) = {
             let mut workflow = HashMap::new();
             let mut wf_ids = Vec::new();
@@ -40,31 +40,11 @@ impl ProcessorBuilder {
                 assert!(workflow.insert(id, Arc::new(builder.build())).is_none());
                 wf_ids.push(id);
             }
-            (workflow, wf_ids)
+            (Arc::new(workflow), wf_ids)
         };
-        Processor {
-            wf_ids,
-            workflow: Arc::new(workflow),
-        }
-    }
-}
 
-/// プロセッサー
-pub struct Processor {
-    wf_ids: Vec<WorkflowID>,
-    workflow: Arc<HashMap<WorkflowID, Arc<Workflow>>>,
-}
-impl Processor {
-    /// ワークフローID
-    pub fn wf_ids(&self) -> &Vec<WorkflowID> {
-        &self.wf_ids
-    }
-
-    /// プロセスの開始
-    pub fn run(&self, n: usize) -> (JoinHandle<()>, mpsc::Sender<WorkflowID>, CancellationToken) {
         let (tx, mut rx): (mpsc::Sender<WorkflowID>, mpsc::Receiver<WorkflowID>) =
             mpsc::channel(16);
-        let workflow = self.workflow.clone();
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
@@ -144,6 +124,45 @@ impl Processor {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
         });
-        (handle, tx, cancel)
+
+        Processor {
+            wf_ids,
+            handle,
+            tx,
+            cancel,
+        }
+    }
+}
+
+/// プロセッサー
+pub struct Processor {
+    wf_ids: Vec<WorkflowID>,
+    handle: JoinHandle<()>,
+    tx: mpsc::Sender<WorkflowID>,
+    cancel: CancellationToken,
+}
+impl Processor {
+    /// ワークフローID
+    pub fn wf_ids(&self) -> &Vec<WorkflowID> {
+        &self.wf_ids
+    }
+
+    /// ワークフローの開始
+    ///
+    /// # Arguments
+    ///
+    /// * `wf_id` - ワークフローID
+    pub async fn start(&self, wf_id: WorkflowID) {
+        self.tx.send(wf_id).await.unwrap();
+    }
+
+    /// プロセッサーの停止
+    pub fn stop(&self) {
+        self.cancel.cancel();
+    }
+
+    /// プロセッサーの待機
+    pub async fn wait(self) {
+        self.handle.await.unwrap();
     }
 }
