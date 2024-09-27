@@ -33,7 +33,7 @@ pub struct Edge {
 }
 impl std::fmt::Debug for Edge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StartEdge").field("id", &self.id).finish()
+        f.debug_struct("Edge").field("id", &self.id).finish()
     }
 }
 impl Edge {
