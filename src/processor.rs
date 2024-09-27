@@ -91,6 +91,9 @@ impl Processor {
                     }
                     let rg = item.unwrap();
                     let wf_id = rg.lock().await.wf_id();
+                    if rg.lock().await.finished {
+                        continue;
+                    }
                     let wf = workflow[&wf_id].clone();
                     let rg_clone = rg.clone();
                     if !retains.is_empty() {
@@ -119,19 +122,15 @@ impl Processor {
                         tokio::select! {
                             // タスクが終了した場合
                             res = handle => {
-                                println!("Task {} has finished", key);
                                 let task_index = res.unwrap(); // タスクが正常に終了したか確認
                                 retains.push_back(key);
                                 let rg = rg.lock().await;
                                 let wf = workflow[&rg.wf_id()].clone();
-                                let finished = wf.done(task_index, rg);
+                                wf.done(task_index, rg);
                                 *item= None; // タスクハンドルをクリア
                             }
                             // タスクが終了していない場合
-                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
-                                // TODO: テスト後に時間を短くして、continue に変更
-                                println!("Task {} is still running", key);
-                            }
+                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
                         }
                     }
                 }
@@ -140,5 +139,3 @@ impl Processor {
         (handle, tx)
     }
 }
-
-// TODO: プロセッサーの実行テスト
