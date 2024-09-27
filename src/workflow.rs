@@ -124,10 +124,10 @@ impl Workflow {
         None
     }
 
-    pub(crate) fn done(&self, task_index: usize, mut registry: MutexGuard<Registry>) -> bool {
+    pub(crate) fn done(&self, task_index: usize, mut registry: MutexGuard<Registry>) {
         let children = self.graph.children(task_index);
         if children.is_empty() {
-            return true;
+            registry.finished = true;
         }
         for next_index in self.graph.children(task_index) {
             let nt = self.nodes.get(*next_index).unwrap();
@@ -135,7 +135,6 @@ impl Workflow {
                 registry.enqueue(*next_index);
             }
         }
-        false
     }
 }
 
@@ -323,30 +322,37 @@ mod tests {
         let (t0, task0) = wf.get_next(rg.lock().await).unwrap();
         let f0 = task0.run(&rg);
         f0.await;
-        assert!(!wf.done(t0, rg.lock().await));
+        wf.done(t0, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         let (t1, task1) = wf.get_next(rg.lock().await).unwrap();
         let f1 = task1.run(&rg);
         let (t2, task2) = wf.get_next(rg.lock().await).unwrap();
         let f2 = task2.run(&rg);
         f1.await;
-        assert!(!wf.done(t1, rg.lock().await));
+        wf.done(t1, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         let (t3, task3) = wf.get_next(rg.lock().await).unwrap();
         let f3 = task3.run(&rg);
         f3.await;
-        assert!(!wf.done(t3, rg.lock().await));
+        wf.done(t3, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         let (t4, task4) = wf.get_next(rg.lock().await).unwrap();
         let f4 = task4.run(&rg);
         f4.await;
-        assert!(!wf.done(t4, rg.lock().await));
+        wf.done(t4, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         f2.await;
-        assert!(!wf.done(t2, rg.lock().await));
+        wf.done(t2, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         let (t5, task5) = wf.get_next(rg.lock().await).unwrap();
         let f5 = task5.run(&rg);
         f5.await;
-        assert!(!wf.done(t5, rg.lock().await));
+        wf.done(t5, rg.lock().await);
+        assert!(!rg.lock().await.finished);
         let (t6, task6) = wf.get_next(rg.lock().await).unwrap();
         let f6 = task6.run(&rg);
         f6.await;
-        assert!(wf.done(t6, rg.lock().await));
+        wf.done(t6, rg.lock().await);
+        assert!(rg.lock().await.finished);
     }
 }

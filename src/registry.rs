@@ -25,6 +25,7 @@ pub struct Registry {
     data: HashMap<EdgeId, Box<dyn Any + 'static + Send + Sync>>,
     queue: VecDeque<usize>,
     wf_id: WorkflowID,
+    pub(crate) finished: bool,
 }
 impl Registry {
     pub(crate) fn new(wf_id: WorkflowID) -> Self {
@@ -32,6 +33,7 @@ impl Registry {
             data: HashMap::new(),
             queue: VecDeque::new(),
             wf_id,
+            finished: false,
         }
     }
 
