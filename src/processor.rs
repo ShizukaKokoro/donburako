@@ -4,6 +4,7 @@
 
 use crate::registry::Registry;
 use crate::workflow::{WorkflowBuilder, WorkflowID};
+use log::{debug, info};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ impl ProcessorBuilder {
 
     /// ビルド
     pub fn build(self, n: usize) -> Processor {
+        debug!("Start building processor");
         let (workflow, wf_ids) = {
             let mut workflow = HashMap::new();
             let mut wf_ids = Vec::new();
@@ -60,17 +62,21 @@ impl ProcessorBuilder {
                 }
                 retains
             };
+            debug!("End setting up processor: capacity={}", n);
+
             loop {
                 if cancel_clone.is_cancelled() {
                     break;
                 }
 
                 while let Ok(wf_id) = rx.try_recv() {
+                    debug!("Start workflow: {:?}", wf_id);
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
                     rgs.push_back(Some(rg.clone()));
                     workflow[&wf_id].start(rg.lock().await);
                 }
 
+                debug!("Get nodes enabled to run");
                 rgs.push_back(None); // キューの最後をマーク
                 while let Some(item) = rgs.pop_front() {
                     if item.is_none() {
@@ -79,6 +85,7 @@ impl ProcessorBuilder {
                     let rg = item.unwrap();
                     let wf_id = rg.lock().await.wf_id();
                     if rg.lock().await.finished {
+                        debug!("Workflow is finished: {:?}", wf_id);
                         continue;
                     }
                     let wf = workflow[&wf_id].clone();
@@ -104,11 +111,13 @@ impl ProcessorBuilder {
                     rgs.push_back(Some(rg_clone));
                 }
 
+                debug!("Check running tasks");
                 for (key, item) in handles.iter_mut().enumerate().take(n) {
                     if let Some((handle, rg)) = item {
                         tokio::select! {
                             // タスクが終了した場合
                             res = handle => {
+                                debug!("Task is done(at {} / {})", key, n);
                                 let task_index = res.unwrap(); // タスクが正常に終了したか確認
                                 retains.push_back(key);
                                 let rg = rg.lock().await;
@@ -153,16 +162,19 @@ impl Processor {
     ///
     /// * `wf_id` - ワークフローID
     pub async fn start(&self, wf_id: WorkflowID) {
+        info!("Start workflow: {:?}", wf_id);
         self.tx.send(wf_id).await.unwrap();
     }
 
     /// プロセッサーの停止
     pub fn stop(&self) {
+        info!("Stop processor");
         self.cancel.cancel();
     }
 
     /// プロセッサーの待機
     pub async fn wait(self) {
+        info!("Wait processor");
         self.handle.await.unwrap();
     }
 }
