@@ -4,12 +4,29 @@
 //! これは必ずイミュータブルな構造体であり、ビルダーを用いて構築する。
 
 use crate::edge::Edge;
-use crate::graph::Graph;
+use crate::graph::{Graph, GraphError};
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::MutexGuard;
 use uuid::Uuid;
+
+/// ワークフローエラー
+#[derive(Error, Debug)]
+pub enum WorkflowError {
+    /// グラフエラー
+    #[error("graph error: {0}")]
+    GraphError(#[from] GraphError),
+
+    /// ノード追加が完了していない
+    #[error("Node addition is not complete")]
+    NodeAdditionIsNotComplete,
+
+    /// ノード追加が完了した
+    #[error("Node addition is complete")]
+    NodeAdditionIsComplete,
+}
 
 /// ワークフロービルダー
 ///
@@ -32,13 +49,13 @@ impl WorkflowBuilder {
     /// # Panics
     ///
     /// ノードの追加が終了した後にノードを追加しようとした場合、パニックする。
-    pub fn add_node(self, node: NodeBuilder) -> Self {
+    pub fn add_node(self, node: NodeBuilder) -> Result<Self, WorkflowError> {
         if self.graph.is_some() {
-            panic!("Cannot add node after building graph");
+            return Err(WorkflowError::NodeAdditionIsComplete);
         }
         let mut nodes = self.nodes;
         nodes.push(node);
-        Self { nodes, ..self }
+        Ok(Self { nodes, ..self })
     }
 
     /// ノードの追加を終了する
@@ -64,27 +81,38 @@ impl WorkflowBuilder {
     /// # Panics
     ///
     /// ノードの追加が終了していない場合、パニックする。
-    pub fn add_edge<T: 'static + Send + Sync>(mut self, from: usize, to: usize) -> Self {
-        self.graph.as_mut().unwrap().add_edge(from, to).unwrap();
+    pub fn add_edge<T: 'static + Send + Sync>(
+        self,
+        from: usize,
+        to: usize,
+    ) -> Result<Self, WorkflowError> {
+        let WorkflowBuilder {
+            mut nodes,
+            mut graph,
+        } = self;
+        if graph.is_none() {
+            return Err(WorkflowError::NodeAdditionIsNotComplete);
+        }
+        graph.as_mut().unwrap().add_edge(from, to)?;
         let edge = Arc::new(Edge::new::<T>());
-        self.nodes[from].add_output(edge.clone());
-        self.nodes[to].add_input(edge.clone());
-        self
+        nodes[from].add_output(edge.clone());
+        nodes[to].add_input(edge.clone());
+        Ok(WorkflowBuilder { nodes, graph })
     }
 
-    pub(crate) fn build(self) -> Workflow {
+    pub(crate) fn build(self) -> Result<Workflow, WorkflowError> {
         if let Some(graph) = self.graph {
             graph.check_start_end().unwrap();
-            Workflow {
+            Ok(Workflow {
                 nodes: self
                     .nodes
                     .into_iter()
                     .map(|node| Arc::new(node.build()))
                     .collect(),
                 graph,
-            }
+            })
         } else {
-            panic!("Graph is not built");
+            Err(WorkflowError::NodeAdditionIsNotComplete)
         }
     }
 }
@@ -106,12 +134,13 @@ pub(crate) struct Workflow {
     graph: Graph,
 }
 impl Workflow {
-    pub(crate) fn start(&self, mut registry: MutexGuard<Registry>) {
-        let index = self.graph.get_start().unwrap();
+    pub(crate) fn start(&self, mut registry: MutexGuard<Registry>) -> Result<(), WorkflowError> {
+        let index = self.graph.get_start()?;
         let node = self.nodes.get(index).unwrap();
         if registry.check(node) {
             registry.enqueue(index);
         }
+        Ok(())
     }
 
     pub(crate) fn get_next(
@@ -150,12 +179,17 @@ mod tests {
         let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
         let builder = WorkflowBuilder::default()
             .add_node(node1)
+            .unwrap()
             .add_node(node2)
+            .unwrap()
             .add_node(node3)
+            .unwrap()
             .finish_nodes()
             .add_edge::<i32>(0, 1)
-            .add_edge::<i32>(1, 2);
-        let workflow = builder.build();
+            .unwrap()
+            .add_edge::<i32>(1, 2)
+            .unwrap();
+        let workflow = builder.build().unwrap();
         assert_eq!(workflow.nodes.len(), 3);
     }
 
@@ -298,27 +332,44 @@ mod tests {
 
         let builder = WorkflowBuilder::default()
             .add_node(node0)
+            .unwrap()
             .add_node(node1)
+            .unwrap()
             .add_node(node2)
+            .unwrap()
             .add_node(node3)
+            .unwrap()
             .add_node(node4)
+            .unwrap()
             .add_node(node5)
+            .unwrap()
             .add_node(node6)
+            .unwrap()
             .finish_nodes()
             .add_edge::<&str>(0, 1)
+            .unwrap()
             .add_edge::<u8>(0, 1)
+            .unwrap()
             .add_edge::<&str>(0, 2)
+            .unwrap()
             .add_edge::<&str>(0, 3)
+            .unwrap()
             .add_edge::<&str>(1, 3)
+            .unwrap()
             .add_edge::<&str>(2, 5)
+            .unwrap()
             .add_edge::<&str>(3, 4)
+            .unwrap()
             .add_edge::<&str>(3, 5)
+            .unwrap()
             .add_edge::<&str>(4, 5)
-            .add_edge::<&str>(5, 6);
+            .unwrap()
+            .add_edge::<&str>(5, 6)
+            .unwrap();
 
         let rg = Arc::new(Mutex::new(Registry::new(WorkflowID::new())));
-        let wf = builder.build();
-        wf.start(rg.lock().await);
+        let wf = builder.build().unwrap();
+        wf.start(rg.lock().await).unwrap();
         let (t0, task0) = wf.get_next(rg.lock().await).unwrap();
         let f0 = task0.run(&rg);
         f0.await;
