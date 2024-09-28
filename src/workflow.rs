@@ -74,7 +74,7 @@ impl WorkflowBuilder {
 
     pub(crate) fn build(self) -> Workflow {
         if let Some(graph) = self.graph {
-            graph.check_start_end();
+            graph.check_start_end().unwrap();
             Workflow {
                 nodes: self
                     .nodes
@@ -107,7 +107,7 @@ pub(crate) struct Workflow {
 }
 impl Workflow {
     pub(crate) fn start(&self, mut registry: MutexGuard<Registry>) {
-        let index = self.graph.get_start();
+        let index = self.graph.get_start().unwrap();
         let node = self.nodes.get(index).unwrap();
         if registry.check(node) {
             registry.enqueue(index);

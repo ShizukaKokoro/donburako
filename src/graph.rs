@@ -8,6 +8,10 @@ use thiserror::Error;
 pub enum GraphError {
     #[error("Invalid path")]
     InvalidPath,
+    #[error("Multiple start nodes")]
+    MultipleStartNodes,
+    #[error("Multiple end nodes")]
+    MultipleEndNodes,
 }
 
 #[derive(Debug)]
@@ -50,7 +54,7 @@ impl Graph {
         false
     }
 
-    pub fn get_start(&self) -> usize {
+    pub fn get_start(&self) -> Result<usize, GraphError> {
         let mut is_start = vec![true; self.0.len()];
         for edges in &self.0 {
             for &edge in edges {
@@ -63,14 +67,14 @@ impl Graph {
                 if start.is_none() {
                     start = Some(i);
                 } else {
-                    panic!("Multiple start nodes");
+                    return Err(GraphError::MultipleStartNodes);
                 }
             }
         }
-        start.unwrap()
+        Ok(start.unwrap())
     }
 
-    pub fn get_end(&self) -> usize {
+    pub fn get_end(&self) -> Result<usize, GraphError> {
         let mut is_end = vec![false; self.0.len()];
         for (i, edges) in self.0.iter().enumerate() {
             if edges.is_empty() {
@@ -83,16 +87,18 @@ impl Graph {
                 if end.is_none() {
                     end = Some(i);
                 } else {
-                    panic!("Multiple end nodes");
+                    return Err(GraphError::MultipleEndNodes);
                 }
             }
         }
-        end.unwrap()
+        Ok(end.unwrap())
     }
 
-    pub fn check_start_end(&self) {
-        if !self.check_valid_path(self.get_start(), self.get_end()) {
-            panic!("No path from start to end");
+    pub fn check_start_end(&self) -> Result<(), GraphError> {
+        if !self.check_valid_path(self.get_start()?, self.get_end()?) {
+            Err(GraphError::InvalidPath)
+        } else {
+            Ok(())
         }
     }
 
@@ -118,7 +124,7 @@ mod tests {
         let mut graph = Graph::new(3);
         graph.add_edge(0, 1).unwrap();
         graph.add_edge(1, 2).unwrap();
-        assert_eq!(graph.get_start(), 0);
+        assert_eq!(graph.get_start().unwrap(), 0);
     }
 
     #[test]
@@ -126,7 +132,7 @@ mod tests {
         let mut graph = Graph::new(3);
         graph.add_edge(0, 1).unwrap();
         graph.add_edge(1, 2).unwrap();
-        assert_eq!(graph.get_end(), 2);
+        assert_eq!(graph.get_end().unwrap(), 2);
     }
 
     #[test]
@@ -134,6 +140,6 @@ mod tests {
         let mut graph = Graph::new(3);
         graph.add_edge(0, 1).unwrap();
         graph.add_edge(1, 2).unwrap();
-        graph.check_start_end();
+        assert!(graph.check_start_end().is_ok());
     }
 }
