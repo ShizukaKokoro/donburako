@@ -103,12 +103,19 @@ impl WorkflowBuilder {
     pub(crate) fn build(self) -> Result<Workflow, WorkflowError> {
         if let Some(graph) = self.graph {
             graph.check_start_end().unwrap();
+            let nodes = {
+                let mut nodes = Vec::with_capacity(self.nodes.len());
+                for node in self.nodes {
+                    let n = match node {
+                        NodeBuilder::UserNode(node) => Node::UserNode(node.build()),
+                        NodeBuilder::AnyInputNode(node) => Node::AnyInputNode(node.build()),
+                    };
+                    nodes.push(Arc::new(n));
+                }
+                nodes
+            };
             Ok(Workflow {
-                nodes: self
-                    .nodes
-                    .into_iter()
-                    .map(|node| Arc::new(node.build()))
-                    .collect(),
+                nodes: nodes.into_iter().collect(),
                 graph,
             })
         } else {

@@ -48,13 +48,6 @@ impl NodeBuilder {
             Self::AnyInputNode(builder) => builder.add_output(edge),
         }
     }
-
-    pub(crate) fn build(self) -> Node {
-        match self {
-            Self::UserNode(builder) => Node::UserNode(builder.build()),
-            Self::AnyInputNode(builder) => Node::AnyInputNode(builder.build()),
-        }
-    }
 }
 
 /// ユーザーノードビルダー
@@ -84,7 +77,7 @@ impl UserNodeBuilder {
         self.outputs.push(edge);
     }
 
-    fn build(self) -> UserNode {
+    pub(crate) fn build(self) -> UserNode {
         UserNode {
             inputs: self.inputs,
             outputs: self.outputs,
