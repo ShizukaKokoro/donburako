@@ -3,7 +3,6 @@
 //! ワークフローは、複数のステップからなる処理の流れを表現するための構造体。
 //! これは必ずイミュータブルな構造体であり、ビルダーを用いて構築する。
 
-use crate::graph::{Graph, GraphError};
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
 use std::sync::Arc;
@@ -14,10 +13,6 @@ use uuid::Uuid;
 /// ワークフローエラー
 #[derive(Error, Debug)]
 pub enum WorkflowError {
-    /// グラフエラー
-    #[error("graph error: {0}")]
-    GraphError(#[from] GraphError),
-
     /// ノード追加が完了していない
     #[error("Node addition is not complete")]
     NodeAdditionIsNotComplete,
@@ -33,7 +28,6 @@ pub enum WorkflowError {
 #[derive(Default)]
 pub struct WorkflowBuilder {
     nodes: Vec<NodeBuilder>,
-    graph: Option<Graph>,
 }
 impl WorkflowBuilder {
     /// ワークフローにノードを追加する
@@ -49,38 +43,29 @@ impl WorkflowBuilder {
     ///
     /// ノードの追加が終了した後にノードを追加しようとした場合、パニックする。
     pub fn add_node(self, node: NodeBuilder) -> Result<Self, WorkflowError> {
-        if self.graph.is_some() {
-            return Err(WorkflowError::NodeAdditionIsComplete);
-        }
         let mut nodes = self.nodes;
         nodes.push(node);
         Ok(Self { nodes, ..self })
     }
 
     pub(crate) fn build(self) -> Result<Workflow, WorkflowError> {
-        if let Some(graph) = self.graph {
-            graph.check_start_end().unwrap();
-            let nodes = {
-                let mut nodes = Vec::with_capacity(self.nodes.len());
-                for node in self.nodes {
-                    let n = match node {
-                        NodeBuilder::User(node) => Node::User(node.build()),
-                        NodeBuilder::AnyInput(node) => Node::AnyInput(node.build()),
-                        NodeBuilder::If(node) => Node::If(node.build()),
-                        #[cfg(test)]
-                        NodeBuilder::Dummy(node) => Node::User(node.build()),
-                    };
-                    nodes.push(Arc::new(n));
-                }
-                nodes
-            };
-            Ok(Workflow {
-                nodes: nodes.into_iter().collect(),
-                graph,
-            })
-        } else {
-            Err(WorkflowError::NodeAdditionIsNotComplete)
-        }
+        let nodes = {
+            let mut nodes = Vec::with_capacity(self.nodes.len());
+            for node in self.nodes {
+                let n = match node {
+                    NodeBuilder::User(node) => Node::User(node.build()),
+                    NodeBuilder::AnyInput(node) => Node::AnyInput(node.build()),
+                    NodeBuilder::If(node) => Node::If(node.build()),
+                    #[cfg(test)]
+                    NodeBuilder::Dummy(node) => Node::User(node.build()),
+                };
+                nodes.push(Arc::new(n));
+            }
+            nodes
+        };
+        Ok(Workflow {
+            nodes: nodes.into_iter().collect(),
+        })
     }
 }
 
@@ -98,16 +83,10 @@ impl WorkflowID {
 #[derive(Debug)]
 pub(crate) struct Workflow {
     nodes: Vec<Arc<Node>>,
-    graph: Graph,
 }
 impl Workflow {
     pub(crate) fn start(&self, mut registry: MutexGuard<Registry>) -> Result<(), WorkflowError> {
-        let index = self.graph.get_start()?;
-        let node = self.nodes.get(index).unwrap();
-        if registry.check(node) {
-            registry.enqueue(index);
-        }
-        Ok(())
+        todo!()
     }
 
     pub(crate) fn get_next(
@@ -121,16 +100,7 @@ impl Workflow {
     }
 
     pub(crate) fn done(&self, task_index: usize, mut registry: MutexGuard<Registry>) {
-        let children = self.graph.children(task_index);
-        if children.is_empty() {
-            registry.finished = true;
-        }
-        for next_index in self.graph.children(task_index) {
-            let nt = self.nodes.get(*next_index).unwrap();
-            if registry.check(nt) {
-                registry.enqueue(*next_index);
-            }
-        }
+        todo!()
     }
 }
 
