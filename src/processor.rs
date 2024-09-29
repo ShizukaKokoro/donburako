@@ -63,7 +63,7 @@ impl ProcessorBuilder {
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
-            let mut rgs: VecDeque<Option<Arc<Mutex<Registry>>>> = VecDeque::new();
+            let mut rgs: VecDeque<Arc<Mutex<Registry>>> = VecDeque::new();
             let mut handles = Vec::with_capacity(n);
             for _ in 0..n {
                 handles.push(None);
@@ -85,7 +85,7 @@ impl ProcessorBuilder {
                 while let Ok(wf_id) = rx.try_recv() {
                     debug!("Start workflow: {:?}", wf_id);
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
-                    rgs.push_back(Some(rg.clone()));
+                    rgs.push_back(rg.clone());
                     if let Some(wf) = workflow.get(&wf_id) {
                         wf.start(rg.lock().await)?;
                     } else {
@@ -94,12 +94,8 @@ impl ProcessorBuilder {
                 }
 
                 debug!("Get nodes enabled to run");
-                rgs.push_back(None); // キューの最後をマーク
-                while let Some(item) = rgs.pop_front() {
-                    if item.is_none() {
-                        break;
-                    }
-                    let rg = item.unwrap();
+                for _ in 0..rgs.len() {
+                    let rg = rgs.pop_front().unwrap();
                     let wf_id = rg.lock().await.wf_id();
                     if rg.lock().await.finished {
                         debug!("Workflow is finished: {:?}", wf_id);
@@ -125,7 +121,7 @@ impl ProcessorBuilder {
                             handles[index] = Some((handle, rg_clone.clone()));
                         }
                     }
-                    rgs.push_back(Some(rg_clone));
+                    rgs.push_back(rg_clone);
                 }
 
                 debug!("Check running tasks");
