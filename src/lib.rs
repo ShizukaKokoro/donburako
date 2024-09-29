@@ -79,18 +79,12 @@
 
 #![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
-mod edge;
+pub mod edge;
 mod graph;
 pub mod node;
 pub mod processor;
-mod registry;
+pub mod registry;
 pub mod workflow;
-
-pub use edge::Edge;
-pub use node::{NodeBuilder, UserNode};
-pub use processor::{Processor, ProcessorBuilder};
-pub use registry::Registry;
-pub use workflow::WorkflowBuilder;
 
 // TODO: if NodeBuilder を実装する
 // TODO: タイムアウトを実装する(2種類)
