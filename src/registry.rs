@@ -11,11 +11,14 @@ use std::any::Any;
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 
+/// レジストリエラー
 #[derive(Error, Debug)]
 pub enum RegistryError {
+    /// 型不一致
     #[error("Type mismatch")]
     TypeMismatch,
 
+    /// データが見つからない
     #[error("Data not found")]
     DataNotFound,
 }

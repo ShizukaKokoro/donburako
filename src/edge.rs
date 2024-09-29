@@ -12,7 +12,7 @@ use uuid::Uuid;
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct EdgeId(Uuid);
 impl EdgeId {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }
@@ -37,6 +37,7 @@ impl std::fmt::Debug for Edge {
     }
 }
 impl Edge {
+    /// 新しいエッジを生成する
     pub fn new<T: 'static + Send + Sync>() -> Self {
         Edge {
             ty: TypeId::of::<T>(),
@@ -44,11 +45,11 @@ impl Edge {
         }
     }
 
-    pub fn check_type<T: 'static + Send + Sync>(&self) -> bool {
+    pub(crate) fn check_type<T: 'static + Send + Sync>(&self) -> bool {
         self.ty == TypeId::of::<T>()
     }
 
-    pub fn id(&self) -> EdgeId {
+    pub(crate) fn id(&self) -> EdgeId {
         self.id
     }
 }
