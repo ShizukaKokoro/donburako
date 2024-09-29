@@ -91,7 +91,6 @@ pub use processor::{Processor, ProcessorBuilder};
 pub use registry::Registry;
 pub use workflow::WorkflowBuilder;
 
-// TODO: 一つでも入力されたら実行可能な NodeBuilder を実装する(データの集約のみ行う)
 // TODO: if NodeBuilder を実装する
 // TODO: タイムアウトを実装する(2種類)
 // TODO: map~collect NodeBuilder を実装する
