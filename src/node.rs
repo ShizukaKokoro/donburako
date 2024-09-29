@@ -137,7 +137,7 @@ impl AnyInputNodeBuilder {
 ///
 /// ワークフローのステップとして機能するノード
 #[derive(Debug)]
-pub enum Node {
+pub(crate) enum Node {
     /// ユーザーノード
     UserNode(UserNode),
 
