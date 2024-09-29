@@ -64,11 +64,11 @@ impl WorkflowBuilder {
                 let mut nodes = Vec::with_capacity(self.nodes.len());
                 for node in self.nodes {
                     let n = match node {
-                        NodeBuilder::UserNode(node) => Node::UserNode(node.build()),
-                        NodeBuilder::AnyInputNode(node) => Node::AnyInputNode(node.build()),
-                        NodeBuilder::IfNode(node) => Node::IfNode(node.build()),
+                        NodeBuilder::User(node) => Node::User(node.build()),
+                        NodeBuilder::AnyInput(node) => Node::AnyInput(node.build()),
+                        NodeBuilder::If(node) => Node::If(node.build()),
                         #[cfg(test)]
-                        NodeBuilder::DummyNode(node) => Node::UserNode(node.build()),
+                        NodeBuilder::Dummy(node) => Node::User(node.build()),
                     };
                     nodes.push(Arc::new(n));
                 }

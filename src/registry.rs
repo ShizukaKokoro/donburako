@@ -88,7 +88,7 @@ impl Registry {
 
     pub(crate) fn check(&self, node: &Node) -> bool {
         match node {
-            Node::UserNode(node) => {
+            Node::User(node) => {
                 for input in node.inputs() {
                     if !self.data.contains_key(&input.id()) {
                         return false;
@@ -96,7 +96,7 @@ impl Registry {
                 }
                 true
             }
-            Node::IfNode(node) => {
+            Node::If(node) => {
                 for input in node.inputs() {
                     if !self.data.contains_key(&input.id()) {
                         return false;
@@ -104,7 +104,7 @@ impl Registry {
                 }
                 true
             }
-            Node::AnyInputNode(node) => {
+            Node::AnyInput(node) => {
                 let mut count = 0;
                 for input in node.inputs() {
                     if self.data.contains_key(&input.id()) {
@@ -168,17 +168,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check_user_node() {
+    async fn test_check_user_() {
         let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let node = DummyNodeBuilder::new().add_input(edge).build();
-        let res = registry.check(&Node::UserNode(node));
+        let res = registry.check(&Node::User(node));
         assert!(res);
     }
 
     #[tokio::test]
-    async fn test_check_any_input_node() {
+    async fn test_check_any_input_() {
         let mut registry = Registry::new(WorkflowID::new());
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<i32>());
@@ -190,7 +190,7 @@ mod tests {
             .add_input(edge1)
             .add_input(edge2)
             .build();
-        let res = registry.check(&Node::AnyInputNode(node));
+        let res = registry.check(&Node::AnyInput(node));
         assert!(res);
     }
 

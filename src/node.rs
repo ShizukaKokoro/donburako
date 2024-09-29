@@ -20,16 +20,16 @@ type AsyncFn =
 /// ノードを構築するためのビルダー
 pub enum NodeBuilder {
     /// ユーザーノード
-    UserNode(UserNodeBuilder),
+    User(UserNodeBuilder),
 
     /// 任意の入力数を受け取るノード
-    AnyInputNode(AnyInputNodeBuilder),
+    AnyInput(AnyInputNodeBuilder),
 
     /// 条件分岐ノード
-    IfNode(IfNodeBuilder),
+    If(IfNodeBuilder),
 
     #[cfg(test)]
-    DummyNode(dummy::DummyNodeBuilder),
+    Dummy(dummy::DummyNodeBuilder),
 }
 impl NodeBuilder {
     /// 新しいノードビルダーを生成する
@@ -38,7 +38,7 @@ impl NodeBuilder {
     ///
     /// * `func` - ノードの処理を行う関数(非同期)
     pub fn new_user(func: Box<AsyncFn>, is_blocking: bool) -> Self {
-        Self::UserNode(UserNodeBuilder::new(func, is_blocking))
+        Self::User(UserNodeBuilder::new(func, is_blocking))
     }
 
     /// 新しい任意の入力数を受け取るノードビルダーを生成する
@@ -47,40 +47,40 @@ impl NodeBuilder {
     ///
     /// * `count` - 必要な入力の数(=出力の数)
     pub fn new_any_input(count: usize) -> Self {
-        Self::AnyInputNode(AnyInputNodeBuilder::new(count))
+        Self::AnyInput(AnyInputNodeBuilder::new(count))
     }
 
     /// 新しい条件分岐ノードビルダーを生成する
     pub fn new_if() -> Self {
-        Self::IfNode(IfNodeBuilder::new())
+        Self::If(IfNodeBuilder::new())
     }
 
     /// 入力エッジの追加
     pub fn add_input(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::UserNode(builder) => Self::UserNode(builder.add_input(edge)),
-            Self::AnyInputNode(builder) => Self::AnyInputNode(builder.add_input(edge)),
-            Self::IfNode(_) => panic!("Cannot add input to IfNode"),
+            Self::User(builder) => Self::User(builder.add_input(edge)),
+            Self::AnyInput(builder) => Self::AnyInput(builder.add_input(edge)),
+            Self::If(_) => panic!("Cannot add input to IfNode"),
             #[cfg(test)]
-            Self::DummyNode(builder) => Self::DummyNode(builder.add_input(edge)),
+            Self::Dummy(builder) => Self::Dummy(builder.add_input(edge)),
         }
     }
 
     /// 出力エッジの追加
     pub fn add_output(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::UserNode(builder) => Self::UserNode(builder.add_output(edge)),
-            Self::AnyInputNode(builder) => Self::AnyInputNode(builder.add_output(edge)),
-            Self::IfNode(_) => panic!("Cannot add output to IfNode"),
+            Self::User(builder) => Self::User(builder.add_output(edge)),
+            Self::AnyInput(builder) => Self::AnyInput(builder.add_output(edge)),
+            Self::If(_) => panic!("Cannot add output to IfNode"),
             #[cfg(test)]
-            Self::DummyNode(builder) => Self::DummyNode(builder.add_output(edge)),
+            Self::Dummy(builder) => Self::Dummy(builder.add_output(edge)),
         }
     }
 
     /// 条件を表すエッジの追加
     pub fn add_condition(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::IfNode(builder) => Self::IfNode(builder.add_condition(edge)),
+            Self::If(builder) => Self::If(builder.add_condition(edge)),
             _ => panic!("Cannot add condition to non-IfNode"),
         }
     }
@@ -88,7 +88,7 @@ impl NodeBuilder {
     /// 条件が真の場合に遷移するエッジの追加
     pub fn add_true_edge(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::IfNode(builder) => Self::IfNode(builder.add_true_edge(edge)),
+            Self::If(builder) => Self::If(builder.add_true_edge(edge)),
             _ => panic!("Cannot add true edge to non-IfNode"),
         }
     }
@@ -96,7 +96,7 @@ impl NodeBuilder {
     /// 条件が偽の場合に遷移するエッジの追加
     pub fn add_false_edge(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::IfNode(builder) => Self::IfNode(builder.add_false_edge(edge)),
+            Self::If(builder) => Self::If(builder.add_false_edge(edge)),
             _ => panic!("Cannot add false edge to non-IfNode"),
         }
     }
@@ -264,30 +264,30 @@ impl IfNodeBuilder {
 #[derive(Debug)]
 pub(crate) enum Node {
     /// ユーザーノード
-    UserNode(UserNode),
+    User(UserNode),
 
     /// 任意の入力数を受け取るノード
-    AnyInputNode(AnyInputNode),
+    AnyInput(AnyInputNode),
 
     /// 条件分岐ノード
-    IfNode(IfNode),
+    If(IfNode),
 }
 impl Node {
     /// ブロッキングしているかどうかを取得する
     pub(crate) fn is_blocking(&self) -> bool {
         match self {
-            Self::UserNode(node) => node.is_blocking(),
-            Self::AnyInputNode(_) => false,
-            Self::IfNode(_) => false,
+            Self::User(node) => node.is_blocking(),
+            Self::AnyInput(_) => false,
+            Self::If(_) => false,
         }
     }
 
     /// ノードを実行する
     pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         match self {
-            Self::UserNode(node) => node.run(registry).await,
-            Self::AnyInputNode(node) => node.run(registry).await,
-            Self::IfNode(node) => node.run(registry).await,
+            Self::User(node) => node.run(registry).await,
+            Self::AnyInput(node) => node.run(registry).await,
+            Self::If(node) => node.run(registry).await,
         }
     }
 }
