@@ -81,9 +81,13 @@ impl Registry {
     }
 
     pub(crate) fn check(&self, node: &Node) -> bool {
-        for input in node.inputs() {
-            if !self.data.contains_key(&input.id()) {
-                return false;
+        match node {
+            Node::UserNode(node) => {
+                for input in node.inputs() {
+                    if !self.data.contains_key(&input.id()) {
+                        return false;
+                    }
+                }
             }
         }
         true
@@ -141,7 +145,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_check() {
+    async fn test_check_user_node() {
         let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
@@ -150,7 +154,7 @@ mod tests {
             builder.add_input(edge);
             builder.build()
         };
-        let res = registry.check(&node);
+        let res = registry.check(&Node::UserNode(node));
         assert!(res);
     }
 

@@ -11,7 +11,8 @@ use tokio::sync::Mutex;
 
 type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
-type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Arc<Mutex<Registry>>) -> BoxedFuture<'a> + Send + Sync;
+type AsyncFn =
+    dyn for<'a> Fn(&'a UserNode, &'a Arc<Mutex<Registry>>) -> BoxedFuture<'a> + Send + Sync;
 
 /// ノードビルダー
 ///
@@ -44,7 +45,7 @@ impl NodeBuilder {
 
     pub(crate) fn build(self) -> Node {
         match self {
-            Self::UserNode(builder) => builder.build(),
+            Self::UserNode(builder) => Node::UserNode(builder.build()),
         }
     }
 }
@@ -76,8 +77,8 @@ impl UserNodeBuilder {
         self.outputs.push(edge);
     }
 
-    fn build(self) -> Node {
-        Node {
+    fn build(self) -> UserNode {
+        UserNode {
             inputs: self.inputs,
             outputs: self.outputs,
             func: self.func,
@@ -89,13 +90,37 @@ impl UserNodeBuilder {
 /// ノード
 ///
 /// ワークフローのステップとして機能するノード
-pub struct Node {
+#[derive(Debug)]
+pub enum Node {
+    /// ユーザーノード
+    UserNode(UserNode),
+}
+impl Node {
+    /// ブロッキングしているかどうかを取得する
+    pub(crate) fn is_blocking(&self) -> bool {
+        match self {
+            Self::UserNode(node) => node.is_blocking(),
+        }
+    }
+
+    /// ノードを実行する
+    pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+        match self {
+            Self::UserNode(node) => node.run(registry).await,
+        }
+    }
+}
+
+/// ユーザーノード
+///
+/// ユーザーが任意の処理を行うノード
+pub struct UserNode {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
     is_blocking: bool,
 }
-impl Node {
+impl UserNode {
     /// ノードの入力エッジを取得する
     pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         &self.inputs
@@ -107,16 +132,16 @@ impl Node {
     }
 
     /// ブロッキングしているかどうかを取得する
-    pub(crate) fn is_blocking(&self) -> bool {
+    fn is_blocking(&self) -> bool {
         self.is_blocking
     }
 
     /// ノードを実行する
-    pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+    async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         (self.func)(self, registry).await;
     }
 }
-impl std::fmt::Debug for Node {
+impl std::fmt::Debug for UserNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
             .field("inputs", &self.inputs)
@@ -150,11 +175,11 @@ pub mod dummy {
             self.outputs.push(edge);
         }
 
-        pub fn build(self) -> Node {
-            Node {
+        pub fn build(self) -> UserNode {
+            UserNode {
                 inputs: self.inputs,
                 outputs: self.outputs,
-                func: Box::new(|self_: &Node, registry: &Arc<Mutex<Registry>>| {
+                func: Box::new(|self_: &UserNode, registry: &Arc<Mutex<Registry>>| {
                     Box::pin(async move {
                         // 引数の取得
                         let arg0: u16 = registry.lock().await.take(&self_.inputs[0]).unwrap();
