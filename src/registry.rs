@@ -15,6 +15,9 @@ use thiserror::Error;
 pub enum RegistryError {
     #[error("Type mismatch")]
     TypeMismatch,
+
+    #[error("Data not found")]
+    DataNotFound,
 }
 
 /// レジストリ
@@ -76,7 +79,10 @@ impl Registry {
         if !edge.check_type::<T>() {
             return Err(RegistryError::TypeMismatch);
         }
-        let data = self.data.remove(&edge.id()).unwrap();
+        let data = self
+            .data
+            .remove(&edge.id())
+            .ok_or(RegistryError::DataNotFound)?;
         Ok(*data.downcast().unwrap())
     }
 
