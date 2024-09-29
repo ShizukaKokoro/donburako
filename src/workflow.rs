@@ -109,6 +109,8 @@ impl WorkflowBuilder {
                     let n = match node {
                         NodeBuilder::UserNode(node) => Node::UserNode(node.build()),
                         NodeBuilder::AnyInputNode(node) => Node::AnyInputNode(node.build()),
+                        #[cfg(test)]
+                        NodeBuilder::DummyNode(node) => Node::UserNode(node.build()),
                     };
                     nodes.push(Arc::new(n));
                 }

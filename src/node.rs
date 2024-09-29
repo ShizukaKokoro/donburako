@@ -24,6 +24,9 @@ pub enum NodeBuilder {
 
     /// 任意の入力数を受け取るノード
     AnyInputNode(AnyInputNodeBuilder),
+
+    #[cfg(test)]
+    DummyNode(dummy::DummyNodeBuilder),
 }
 impl NodeBuilder {
     /// 新しいノードビルダーを生成する
@@ -35,10 +38,26 @@ impl NodeBuilder {
         Self::UserNode(UserNodeBuilder::new(func, is_blocking))
     }
 
+    /// 新しい任意の入力数を受け取るノードビルダーを生成する
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - 必要な入力の数(=出力の数)
+    pub fn new_any_input(count: usize) -> Self {
+        Self::AnyInputNode(AnyInputNodeBuilder::new(count))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_dummy() -> Self {
+        Self::DummyNode(dummy::DummyNodeBuilder::new())
+    }
+
     pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
         match self {
             Self::UserNode(builder) => builder.add_input(edge),
             Self::AnyInputNode(builder) => builder.add_input(edge),
+            #[cfg(test)]
+            Self::DummyNode(builder) => builder.add_input(edge),
         }
     }
 
@@ -46,6 +65,8 @@ impl NodeBuilder {
         match self {
             Self::UserNode(builder) => builder.add_output(edge),
             Self::AnyInputNode(builder) => builder.add_output(edge),
+            #[cfg(test)]
+            Self::DummyNode(builder) => builder.add_output(edge),
         }
     }
 }

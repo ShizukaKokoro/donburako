@@ -120,8 +120,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::dummy::DummyNodeBuilder;
-    use crate::node::AnyInputNodeBuilder;
+    use crate::node::NodeBuilder;
     use std::sync::Arc;
 
     #[test]
@@ -166,9 +165,12 @@ mod tests {
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
         let node = {
-            let mut builder = DummyNodeBuilder::new();
+            let mut builder = NodeBuilder::new_dummy();
             builder.add_input(edge);
-            builder.build()
+            match builder {
+                NodeBuilder::DummyNode(builder) => builder.build(),
+                _ => unreachable!(),
+            }
         };
         let res = registry.check(&Node::UserNode(node));
         assert!(res);
@@ -183,11 +185,14 @@ mod tests {
         registry.store(&edge0, 0).unwrap();
         registry.store(&edge1, 1).unwrap();
         let node = {
-            let mut builder = AnyInputNodeBuilder::new(2);
+            let mut builder = NodeBuilder::new_any_input(2);
             builder.add_input(edge0);
             builder.add_input(edge1);
             builder.add_input(edge2);
-            builder.build()
+            match builder {
+                NodeBuilder::AnyInputNode(builder) => builder.build(),
+                _ => unreachable!(),
+            }
         };
         let res = registry.check(&Node::AnyInputNode(node));
         assert!(res);
