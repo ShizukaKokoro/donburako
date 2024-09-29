@@ -96,6 +96,14 @@ impl Registry {
                 }
                 true
             }
+            Node::IfNode(node) => {
+                for input in node.inputs() {
+                    if !self.data.contains_key(&input.id()) {
+                        return false;
+                    }
+                }
+                true
+            }
             Node::AnyInputNode(node) => {
                 let mut count = 0;
                 for input in node.inputs() {

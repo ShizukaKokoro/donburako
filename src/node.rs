@@ -25,6 +25,9 @@ pub enum NodeBuilder {
     /// 任意の入力数を受け取るノード
     AnyInputNode(AnyInputNodeBuilder),
 
+    /// 条件分岐ノード
+    IfNode(IfNodeBuilder),
+
     #[cfg(test)]
     DummyNode(dummy::DummyNodeBuilder),
 }
@@ -56,6 +59,7 @@ impl NodeBuilder {
         match self {
             Self::UserNode(builder) => builder.add_input(edge),
             Self::AnyInputNode(builder) => builder.add_input(edge),
+            Self::IfNode(builder) => todo!(),
             #[cfg(test)]
             Self::DummyNode(builder) => builder.add_input(edge),
         }
@@ -65,6 +69,7 @@ impl NodeBuilder {
         match self {
             Self::UserNode(builder) => builder.add_output(edge),
             Self::AnyInputNode(builder) => builder.add_output(edge),
+            Self::IfNode(builder) => todo!(),
             #[cfg(test)]
             Self::DummyNode(builder) => builder.add_output(edge),
         }
@@ -147,6 +152,41 @@ impl AnyInputNodeBuilder {
     }
 }
 
+/// 条件分岐ノードビルダー
+///
+/// 条件分岐を行うノードを構築するためのビルダー
+/// count が 1 の AnyInputNode と併用することで、合流できる
+#[derive(Default)]
+pub struct IfNodeBuilder {
+    condition: Option<Arc<Edge>>,
+    true_edge: Option<Arc<Edge>>,
+    false_edge: Option<Arc<Edge>>,
+}
+impl IfNodeBuilder {
+    /// 新しいノードビルダーを生成する
+    ///
+    /// # Arguments
+    ///
+    /// * `condition` - 条件を表すエッジ
+    /// * `true_edge` - 条件が真の場合に遷移するエッジ
+    /// * `false_edge` - 条件が偽の場合に遷移するエッジ
+    pub fn new() -> Self {
+        Self {
+            condition: None,
+            true_edge: None,
+            false_edge: None,
+        }
+    }
+
+    pub(crate) fn build(self) -> IfNode {
+        IfNode {
+            condition: self.condition.unwrap(),
+            true_edge: self.true_edge.unwrap(),
+            false_edge: self.false_edge.unwrap(),
+        }
+    }
+}
+
 /// ノード
 ///
 /// ワークフローのステップとして機能するノード
@@ -157,6 +197,9 @@ pub(crate) enum Node {
 
     /// 任意の入力数を受け取るノード
     AnyInputNode(AnyInputNode),
+
+    /// 条件分岐ノード
+    IfNode(IfNode),
 }
 impl Node {
     /// ブロッキングしているかどうかを取得する
@@ -164,6 +207,7 @@ impl Node {
         match self {
             Self::UserNode(node) => node.is_blocking(),
             Self::AnyInputNode(_) => false,
+            Self::IfNode(_) => false,
         }
     }
 
@@ -172,6 +216,7 @@ impl Node {
         match self {
             Self::UserNode(node) => node.run(registry).await,
             Self::AnyInputNode(node) => node.run(registry).await,
+            Self::IfNode(node) => node.run(registry).await,
         }
     }
 }
@@ -250,6 +295,33 @@ impl AnyInputNode {
         for (output, input) in self.outputs.iter().zip(inputs) {
             registry.lock().await.store(output, input).unwrap();
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct IfNode {
+    condition: Arc<Edge>,
+    true_edge: Arc<Edge>,
+    false_edge: Arc<Edge>,
+}
+impl IfNode {
+    pub(crate) fn inputs(&self) -> Vec<Arc<Edge>> {
+        vec![
+            self.condition.clone(),
+            self.true_edge.clone(),
+            self.false_edge.clone(),
+        ]
+    }
+
+    pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+        let condition = registry.lock().await.take::<bool>(&self.condition).unwrap();
+        let node = if condition {
+            &self.true_edge
+        } else {
+            &self.false_edge
+        };
+
+        registry.lock().await.store(node, ()).unwrap();
     }
 }
 
