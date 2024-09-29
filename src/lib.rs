@@ -91,8 +91,6 @@ pub use processor::{Processor, ProcessorBuilder};
 pub use registry::Registry;
 pub use workflow::WorkflowBuilder;
 
-// TODO: 構文拡張のために、NodeBuilder を列挙型にする
-// TODO: ユニット型をやりとりして、処理の流れを強制、固定する NodeBuilder を実装する
 // TODO: 一つでも入力されたら実行可能な NodeBuilder を実装する(データの集約のみ行う)
 // TODO: if NodeBuilder を実装する
 // TODO: タイムアウトを実装する(2種類)
