@@ -3,7 +3,8 @@
 //! タスクの実行を行うノードを定義するモジュール
 
 use crate::edge::Edge;
-use crate::registry::Registry;
+use crate::registry::{Registry, RegistryError};
+use std::any::Any;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -20,6 +21,9 @@ type AsyncFn =
 pub enum NodeBuilder {
     /// ユーザーノード
     UserNode(UserNodeBuilder),
+
+    /// 任意の入力数を受け取るノード
+    AnyInputNode(AnyInputNodeBuilder),
 }
 impl NodeBuilder {
     /// 新しいノードビルダーを生成する
@@ -34,18 +38,21 @@ impl NodeBuilder {
     pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
         match self {
             Self::UserNode(builder) => builder.add_input(edge),
+            Self::AnyInputNode(builder) => builder.add_input(edge),
         }
     }
 
     pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
         match self {
             Self::UserNode(builder) => builder.add_output(edge),
+            Self::AnyInputNode(builder) => builder.add_output(edge),
         }
     }
 
     pub(crate) fn build(self) -> Node {
         match self {
             Self::UserNode(builder) => Node::UserNode(builder.build()),
+            Self::AnyInputNode(builder) => Node::AnyInputNode(builder.build()),
         }
     }
 }
@@ -87,6 +94,45 @@ impl UserNodeBuilder {
     }
 }
 
+/// 任意の入力数を受け取るノードビルダー
+///
+/// 設定した入力のうち、 count の入力がある場合にのみ実行される
+pub struct AnyInputNodeBuilder {
+    inputs: Vec<Arc<Edge>>,
+    outputs: Vec<Arc<Edge>>,
+    count: usize,
+}
+impl AnyInputNodeBuilder {
+    /// 新しいノードビルダーを生成する
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - 必要な入力の数(=出力の数)
+    pub fn new(count: usize) -> Self {
+        Self {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            count,
+        }
+    }
+
+    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
+        self.inputs.push(edge);
+    }
+
+    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
+        self.outputs.push(edge);
+    }
+
+    pub(crate) fn build(self) -> AnyInputNode {
+        AnyInputNode {
+            inputs: self.inputs,
+            outputs: self.outputs,
+            count: self.count,
+        }
+    }
+}
+
 /// ノード
 ///
 /// ワークフローのステップとして機能するノード
@@ -94,12 +140,16 @@ impl UserNodeBuilder {
 pub enum Node {
     /// ユーザーノード
     UserNode(UserNode),
+
+    /// 任意の入力数を受け取るノード
+    AnyInputNode(AnyInputNode),
 }
 impl Node {
     /// ブロッキングしているかどうかを取得する
     pub(crate) fn is_blocking(&self) -> bool {
         match self {
             Self::UserNode(node) => node.is_blocking(),
+            Self::AnyInputNode(_) => false,
         }
     }
 
@@ -107,6 +157,7 @@ impl Node {
     pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         match self {
             Self::UserNode(node) => node.run(registry).await,
+            self::Node::AnyInputNode(node) => node.run(registry).await,
         }
     }
 }
@@ -147,6 +198,48 @@ impl std::fmt::Debug for UserNode {
             .field("inputs", &self.inputs)
             .field("output", &self.outputs)
             .finish()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct AnyInputNode {
+    inputs: Vec<Arc<Edge>>,
+    outputs: Vec<Arc<Edge>>,
+    count: usize,
+}
+impl AnyInputNode {
+    pub(crate) fn inputs(&self) -> &Vec<Arc<Edge>> {
+        &self.inputs
+    }
+
+    fn outputs(&self) -> &Vec<Arc<Edge>> {
+        &self.outputs
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.count
+    }
+
+    async fn run(&self, registry: &Arc<Mutex<Registry>>) {
+        let mut inputs = Vec::with_capacity(self.count);
+        for input in &self.inputs {
+            let data = registry
+                .lock()
+                .await
+                .take::<Box<dyn Any + 'static + Send + Sync>>(input);
+            if let Ok(data) = data {
+                inputs.push(data);
+            } else {
+                match data.err().unwrap() {
+                    RegistryError::DataNotFound => continue,
+                    RegistryError::TypeMismatch => panic!("Cannot take data from edge"),
+                }
+            }
+        }
+
+        for (output, input) in self.outputs.iter().zip(inputs) {
+            registry.lock().await.store(output, input).unwrap();
+        }
     }
 }
 

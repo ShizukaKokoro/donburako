@@ -94,9 +94,18 @@ impl Registry {
                         return false;
                     }
                 }
+                true
+            }
+            Node::AnyInputNode(node) => {
+                let mut count = 0;
+                for input in node.inputs() {
+                    if self.data.contains_key(&input.id()) {
+                        count += 1;
+                    }
+                }
+                count >= node.count()
             }
         }
-        true
     }
 
     pub(crate) fn enqueue(&mut self, node_index: usize) {
@@ -112,6 +121,7 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::node::dummy::DummyNodeBuilder;
+    use crate::node::AnyInputNodeBuilder;
     use std::sync::Arc;
 
     #[test]
@@ -161,6 +171,25 @@ mod tests {
             builder.build()
         };
         let res = registry.check(&Node::UserNode(node));
+        assert!(res);
+    }
+
+    #[tokio::test]
+    async fn test_check_any_input_node() {
+        let mut registry = Registry::new(WorkflowID::new());
+        let edge0 = Arc::new(Edge::new::<i32>());
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        registry.store(&edge0, 0).unwrap();
+        registry.store(&edge1, 1).unwrap();
+        let node = {
+            let mut builder = AnyInputNodeBuilder::new(2);
+            builder.add_input(edge0);
+            builder.add_input(edge1);
+            builder.add_input(edge2);
+            builder.build()
+        };
+        let res = registry.check(&Node::AnyInputNode(node));
         assert!(res);
     }
 
