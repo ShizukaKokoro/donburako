@@ -120,8 +120,12 @@ impl ProcessorBuilder {
                             };
                             handles[index] = Some((handle, rg_clone.clone()));
                         }
+                        rgs.push_back(rg_clone);
+                    } else {
+                        debug!("No capacity to run");
+                        rgs.push_front(rg);
+                        break;
                     }
-                    rgs.push_back(rg_clone);
                 }
 
                 debug!("Check running tasks");
