@@ -3,7 +3,6 @@
 //! ワークフローは、複数のステップからなる処理の流れを表現するための構造体。
 //! これは必ずイミュータブルな構造体であり、ビルダーを用いて構築する。
 
-use crate::edge::Edge;
 use crate::graph::{Graph, GraphError};
 use crate::node::{Node, NodeBuilder};
 use crate::registry::Registry;
@@ -58,48 +57,6 @@ impl WorkflowBuilder {
         Ok(Self { nodes, ..self })
     }
 
-    /// ノードの追加を終了する
-    ///
-    /// ノードの追加を終了し、グラフの構築を開始する。
-    pub fn finish_nodes(self) -> Self {
-        Self {
-            graph: Some(Graph::new(self.nodes.len())),
-            ..self
-        }
-    }
-
-    /// エッジを追加する
-    ///
-    /// 入力エッジの場合は from に None を指定し、出力エッジの場合は to に None を指定する。
-    /// 両方とも None の場合は追加されず drop される。
-    ///
-    /// # Arguments
-    ///
-    /// * `from` - 始点のノードインデックス(None の場合は入力エッジ)
-    /// * `to` - 終点のノードインデックス(None の場合は出力エッジ)
-    ///
-    /// # Panics
-    ///
-    /// ノードの追加が終了していない場合、パニックする。
-    pub fn add_edge<T: 'static + Send + Sync>(
-        self,
-        from: usize,
-        to: usize,
-    ) -> Result<Self, WorkflowError> {
-        let WorkflowBuilder {
-            mut nodes,
-            mut graph,
-        } = self;
-        if graph.is_none() {
-            return Err(WorkflowError::NodeAdditionIsNotComplete);
-        }
-        graph.as_mut().unwrap().add_edge(from, to)?;
-        let edge = Arc::new(Edge::new::<T>());
-        nodes[from].add_output(edge.clone());
-        nodes[to].add_input(edge.clone());
-        Ok(WorkflowBuilder { nodes, graph })
-    }
-
     pub(crate) fn build(self) -> Result<Workflow, WorkflowError> {
         if let Some(graph) = self.graph {
             graph.check_start_end().unwrap();
@@ -109,6 +66,7 @@ impl WorkflowBuilder {
                     let n = match node {
                         NodeBuilder::UserNode(node) => Node::UserNode(node.build()),
                         NodeBuilder::AnyInputNode(node) => Node::AnyInputNode(node.build()),
+                        NodeBuilder::IfNode(node) => Node::IfNode(node.build()),
                         #[cfg(test)]
                         NodeBuilder::DummyNode(node) => Node::UserNode(node.build()),
                     };
@@ -178,6 +136,8 @@ impl Workflow {
 
 #[cfg(test)]
 mod tests {
+    use crate::edge::Edge;
+
     use super::*;
     use tokio::sync::Mutex;
 
@@ -192,11 +152,6 @@ mod tests {
             .add_node(node2)
             .unwrap()
             .add_node(node3)
-            .unwrap()
-            .finish_nodes()
-            .add_edge::<i32>(0, 1)
-            .unwrap()
-            .add_edge::<i32>(1, 2)
             .unwrap();
         let workflow = builder.build().unwrap();
         assert_eq!(workflow.nodes.len(), 3);
@@ -204,6 +159,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_big_workflow() {
+        let edge_0to1_str = Arc::new(Edge::new::<&str>());
+        let edge_0to1_u8 = Arc::new(Edge::new::<u8>());
+        let edge_0to2 = Arc::new(Edge::new::<&str>());
+        let edge_0to3 = Arc::new(Edge::new::<&str>());
         let node0 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -221,7 +180,12 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_output(edge_0to1_str.clone())
+        .add_output(edge_0to1_u8.clone())
+        .add_output(edge_0to2.clone())
+        .add_output(edge_0to3.clone());
+        let edge_1to3 = Arc::new(Edge::new::<&str>());
         let node1 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -241,7 +205,11 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_input(edge_0to1_str.clone())
+        .add_input(edge_0to1_u8.clone())
+        .add_output(edge_1to3.clone());
+        let edge_2to5 = Arc::new(Edge::new::<&str>());
         let node2 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -259,7 +227,10 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_output(edge_2to5.clone());
+        let edge_3to4 = Arc::new(Edge::new::<&str>());
+        let edge_3to5 = Arc::new(Edge::new::<&str>());
         let node3 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -280,7 +251,12 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_input(edge_0to3.clone())
+        .add_input(edge_1to3.clone())
+        .add_output(edge_3to4.clone())
+        .add_output(edge_3to5.clone());
+        let edge_4to5 = Arc::new(Edge::new::<&str>());
         let node4 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -298,7 +274,10 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_input(edge_3to4.clone())
+        .add_output(edge_4to5.clone());
+        let edge_5to6 = Arc::new(Edge::new::<&str>());
         let node5 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -320,7 +299,11 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_input(edge_2to5.clone())
+        .add_input(edge_3to5.clone())
+        .add_input(edge_4to5.clone())
+        .add_output(edge_5to6.clone());
         let node6 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
@@ -337,7 +320,8 @@ mod tests {
                 })
             }),
             false,
-        );
+        )
+        .add_input(edge_5to6.clone());
 
         let builder = WorkflowBuilder::default()
             .add_node(node0)
@@ -353,27 +337,6 @@ mod tests {
             .add_node(node5)
             .unwrap()
             .add_node(node6)
-            .unwrap()
-            .finish_nodes()
-            .add_edge::<&str>(0, 1)
-            .unwrap()
-            .add_edge::<u8>(0, 1)
-            .unwrap()
-            .add_edge::<&str>(0, 2)
-            .unwrap()
-            .add_edge::<&str>(0, 3)
-            .unwrap()
-            .add_edge::<&str>(1, 3)
-            .unwrap()
-            .add_edge::<&str>(2, 5)
-            .unwrap()
-            .add_edge::<&str>(3, 4)
-            .unwrap()
-            .add_edge::<&str>(3, 5)
-            .unwrap()
-            .add_edge::<&str>(4, 5)
-            .unwrap()
-            .add_edge::<&str>(5, 6)
             .unwrap();
 
         let rg = Arc::new(Mutex::new(Registry::new(WorkflowID::new())));

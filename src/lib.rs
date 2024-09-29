@@ -86,6 +86,7 @@ pub mod processor;
 mod registry;
 pub mod workflow;
 
+pub use edge::Edge;
 pub use node::{NodeBuilder, UserNode};
 pub use processor::{Processor, ProcessorBuilder};
 pub use registry::Registry;

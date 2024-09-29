@@ -128,7 +128,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::NodeBuilder;
+    use crate::node::{dummy::DummyNodeBuilder, AnyInputNodeBuilder};
     use std::sync::Arc;
 
     #[test]
@@ -172,14 +172,7 @@ mod tests {
         let mut registry = Registry::new(WorkflowID::new());
         let edge = Arc::new(Edge::new::<i32>());
         registry.store(&edge, 42).unwrap();
-        let node = {
-            let mut builder = NodeBuilder::new_dummy();
-            builder.add_input(edge);
-            match builder {
-                NodeBuilder::DummyNode(builder) => builder.build(),
-                _ => unreachable!(),
-            }
-        };
+        let node = DummyNodeBuilder::new().add_input(edge).build();
         let res = registry.check(&Node::UserNode(node));
         assert!(res);
     }
@@ -192,16 +185,11 @@ mod tests {
         let edge2 = Arc::new(Edge::new::<i32>());
         registry.store(&edge0, 0).unwrap();
         registry.store(&edge1, 1).unwrap();
-        let node = {
-            let mut builder = NodeBuilder::new_any_input(2);
-            builder.add_input(edge0);
-            builder.add_input(edge1);
-            builder.add_input(edge2);
-            match builder {
-                NodeBuilder::AnyInputNode(builder) => builder.build(),
-                _ => unreachable!(),
-            }
-        };
+        let node = AnyInputNodeBuilder::new(2)
+            .add_input(edge0)
+            .add_input(edge1)
+            .add_input(edge2)
+            .build();
         let res = registry.check(&Node::AnyInputNode(node));
         assert!(res);
     }

@@ -50,28 +50,54 @@ impl NodeBuilder {
         Self::AnyInputNode(AnyInputNodeBuilder::new(count))
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_dummy() -> Self {
-        Self::DummyNode(dummy::DummyNodeBuilder::new())
+    /// 新しい条件分岐ノードビルダーを生成する
+    pub fn new_if() -> Self {
+        Self::IfNode(IfNodeBuilder::new())
     }
 
-    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
+    /// 入力エッジの追加
+    pub fn add_input(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::UserNode(builder) => builder.add_input(edge),
-            Self::AnyInputNode(builder) => builder.add_input(edge),
-            Self::IfNode(builder) => todo!(),
+            Self::UserNode(builder) => Self::UserNode(builder.add_input(edge)),
+            Self::AnyInputNode(builder) => Self::AnyInputNode(builder.add_input(edge)),
+            Self::IfNode(_) => panic!("Cannot add input to IfNode"),
             #[cfg(test)]
-            Self::DummyNode(builder) => builder.add_input(edge),
+            Self::DummyNode(builder) => Self::DummyNode(builder.add_input(edge)),
         }
     }
 
-    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
+    /// 出力エッジの追加
+    pub fn add_output(self, edge: Arc<Edge>) -> Self {
         match self {
-            Self::UserNode(builder) => builder.add_output(edge),
-            Self::AnyInputNode(builder) => builder.add_output(edge),
-            Self::IfNode(builder) => todo!(),
+            Self::UserNode(builder) => Self::UserNode(builder.add_output(edge)),
+            Self::AnyInputNode(builder) => Self::AnyInputNode(builder.add_output(edge)),
+            Self::IfNode(_) => panic!("Cannot add output to IfNode"),
             #[cfg(test)]
-            Self::DummyNode(builder) => builder.add_output(edge),
+            Self::DummyNode(builder) => Self::DummyNode(builder.add_output(edge)),
+        }
+    }
+
+    /// 条件を表すエッジの追加
+    pub fn add_condition(self, edge: Arc<Edge>) -> Self {
+        match self {
+            Self::IfNode(builder) => Self::IfNode(builder.add_condition(edge)),
+            _ => panic!("Cannot add condition to non-IfNode"),
+        }
+    }
+
+    /// 条件が真の場合に遷移するエッジの追加
+    pub fn add_true_edge(self, edge: Arc<Edge>) -> Self {
+        match self {
+            Self::IfNode(builder) => Self::IfNode(builder.add_true_edge(edge)),
+            _ => panic!("Cannot add true edge to non-IfNode"),
+        }
+    }
+
+    /// 条件が偽の場合に遷移するエッジの追加
+    pub fn add_false_edge(self, edge: Arc<Edge>) -> Self {
+        match self {
+            Self::IfNode(builder) => Self::IfNode(builder.add_false_edge(edge)),
+            _ => panic!("Cannot add false edge to non-IfNode"),
         }
     }
 }
@@ -95,12 +121,18 @@ impl UserNodeBuilder {
         }
     }
 
-    fn add_input(&mut self, edge: Arc<Edge>) {
-        self.inputs.push(edge);
+    /// 入力エッジを追加する
+    pub fn add_input(self, edge: Arc<Edge>) -> Self {
+        let mut inputs = self.inputs;
+        inputs.push(edge);
+        Self { inputs, ..self }
     }
 
-    fn add_output(&mut self, edge: Arc<Edge>) {
-        self.outputs.push(edge);
+    /// 出力エッジを追加する
+    pub fn add_output(self, edge: Arc<Edge>) -> Self {
+        let mut outputs = self.outputs;
+        outputs.push(edge);
+        Self { outputs, ..self }
     }
 
     pub(crate) fn build(self) -> UserNode {
@@ -135,12 +167,18 @@ impl AnyInputNodeBuilder {
         }
     }
 
-    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
-        self.inputs.push(edge);
+    /// 入力エッジを追加する
+    pub fn add_input(self, edge: Arc<Edge>) -> Self {
+        let mut inputs = self.inputs;
+        inputs.push(edge);
+        Self { inputs, ..self }
     }
 
-    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
-        self.outputs.push(edge);
+    /// 出力エッジを追加する
+    pub fn add_output(self, edge: Arc<Edge>) -> Self {
+        let mut outputs = self.outputs;
+        outputs.push(edge);
+        Self { outputs, ..self }
     }
 
     pub(crate) fn build(self) -> AnyInputNode {
@@ -170,11 +208,44 @@ impl IfNodeBuilder {
     /// * `condition` - 条件を表すエッジ
     /// * `true_edge` - 条件が真の場合に遷移するエッジ
     /// * `false_edge` - 条件が偽の場合に遷移するエッジ
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             condition: None,
             true_edge: None,
             false_edge: None,
+        }
+    }
+
+    /// 条件を表すエッジを追加する
+    pub fn add_condition(self, edge: Arc<Edge>) -> Self {
+        if edge.check_type::<bool>() {
+            panic!("Type mismatch: condition edge must be bool");
+        }
+        Self {
+            condition: Some(edge),
+            ..self
+        }
+    }
+
+    /// 条件が真の場合に遷移するエッジを追加する
+    pub fn add_true_edge(self, edge: Arc<Edge>) -> Self {
+        if edge.check_type::<()>() {
+            panic!("Type mismatch: true edge must be unit");
+        }
+        Self {
+            true_edge: Some(edge),
+            ..self
+        }
+    }
+
+    /// 条件が偽の場合に遷移するエッジを追加する
+    pub fn add_false_edge(self, edge: Arc<Edge>) -> Self {
+        if edge.check_type::<()>() {
+            panic!("Type mismatch: false edge must be unit");
+        }
+        Self {
+            false_edge: Some(edge),
+            ..self
         }
     }
 
@@ -342,12 +413,16 @@ pub mod dummy {
             }
         }
 
-        pub fn add_input(&mut self, edge: Arc<Edge>) {
-            self.inputs.push(edge);
+        pub fn add_input(self, edge: Arc<Edge>) -> Self {
+            let mut inputs = self.inputs;
+            inputs.push(edge);
+            Self { inputs, ..self }
         }
 
-        pub fn add_output(&mut self, edge: Arc<Edge>) {
-            self.outputs.push(edge);
+        pub fn add_output(self, edge: Arc<Edge>) -> Self {
+            let mut outputs = self.outputs;
+            outputs.push(edge);
+            Self { outputs, ..self }
         }
 
         pub fn build(self) -> UserNode {
