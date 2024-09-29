@@ -212,10 +212,6 @@ impl AnyInputNode {
         &self.inputs
     }
 
-    fn outputs(&self) -> &Vec<Arc<Edge>> {
-        &self.outputs
-    }
-
     pub(crate) fn count(&self) -> usize {
         self.count
     }
