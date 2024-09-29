@@ -157,7 +157,7 @@ impl Node {
     pub(crate) async fn run(&self, registry: &Arc<Mutex<Registry>>) {
         match self {
             Self::UserNode(node) => node.run(registry).await,
-            self::Node::AnyInputNode(node) => node.run(registry).await,
+            Self::AnyInputNode(node) => node.run(registry).await,
         }
     }
 }
