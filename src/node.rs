@@ -31,76 +31,6 @@ pub enum NodeBuilder {
     #[cfg(test)]
     Dummy(dummy::DummyNodeBuilder),
 }
-impl NodeBuilder {
-    /// 新しいノードビルダーを生成する
-    ///
-    /// # Arguments
-    ///
-    /// * `func` - ノードの処理を行う関数(非同期)
-    pub fn new_user(func: Box<AsyncFn>, is_blocking: bool) -> Self {
-        Self::User(UserNodeBuilder::new(func, is_blocking))
-    }
-
-    /// 新しい任意の入力数を受け取るノードビルダーを生成する
-    ///
-    /// # Arguments
-    ///
-    /// * `count` - 必要な入力の数(=出力の数)
-    pub fn new_any_input(count: usize) -> Self {
-        Self::AnyInput(AnyInputNodeBuilder::new(count))
-    }
-
-    /// 新しい条件分岐ノードビルダーを生成する
-    pub fn new_if() -> Self {
-        Self::If(IfNodeBuilder::new())
-    }
-
-    /// 入力エッジの追加
-    pub fn add_input(self, edge: Arc<Edge>) -> Self {
-        match self {
-            Self::User(builder) => Self::User(builder.add_input(edge)),
-            Self::AnyInput(builder) => Self::AnyInput(builder.add_input(edge)),
-            Self::If(_) => panic!("Cannot add input to IfNode"),
-            #[cfg(test)]
-            Self::Dummy(builder) => Self::Dummy(builder.add_input(edge)),
-        }
-    }
-
-    /// 出力エッジの追加
-    pub fn add_output(self, edge: Arc<Edge>) -> Self {
-        match self {
-            Self::User(builder) => Self::User(builder.add_output(edge)),
-            Self::AnyInput(builder) => Self::AnyInput(builder.add_output(edge)),
-            Self::If(_) => panic!("Cannot add output to IfNode"),
-            #[cfg(test)]
-            Self::Dummy(builder) => Self::Dummy(builder.add_output(edge)),
-        }
-    }
-
-    /// 条件を表すエッジの追加
-    pub fn add_condition(self, edge: Arc<Edge>) -> Self {
-        match self {
-            Self::If(builder) => Self::If(builder.add_condition(edge)),
-            _ => panic!("Cannot add condition to non-IfNode"),
-        }
-    }
-
-    /// 条件が真の場合に遷移するエッジの追加
-    pub fn add_true_edge(self, edge: Arc<Edge>) -> Self {
-        match self {
-            Self::If(builder) => Self::If(builder.add_true_edge(edge)),
-            _ => panic!("Cannot add true edge to non-IfNode"),
-        }
-    }
-
-    /// 条件が偽の場合に遷移するエッジの追加
-    pub fn add_false_edge(self, edge: Arc<Edge>) -> Self {
-        match self {
-            Self::If(builder) => Self::If(builder.add_false_edge(edge)),
-            _ => panic!("Cannot add false edge to non-IfNode"),
-        }
-    }
-}
 
 /// ユーザーノードビルダー
 ///
@@ -112,7 +42,8 @@ pub struct UserNodeBuilder {
     is_blocking: bool,
 }
 impl UserNodeBuilder {
-    fn new(func: Box<AsyncFn>, is_blocking: bool) -> Self {
+    /// 新しいノードビルダーを生成する
+    pub fn new(func: Box<AsyncFn>, is_blocking: bool) -> Self {
         Self {
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -208,7 +139,7 @@ impl IfNodeBuilder {
     /// * `condition` - 条件を表すエッジ
     /// * `true_edge` - 条件が真の場合に遷移するエッジ
     /// * `false_edge` - 条件が偽の場合に遷移するエッジ
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             condition: None,
             true_edge: None,

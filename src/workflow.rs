@@ -136,16 +136,25 @@ impl Workflow {
 
 #[cfg(test)]
 mod tests {
-    use crate::edge::Edge;
-
     use super::*;
+    use crate::edge::Edge;
+    use crate::node::UserNodeBuilder;
     use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn test_workflow() {
-        let node1 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
-        let node2 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
-        let node3 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
+        let node1 = NodeBuilder::User(UserNodeBuilder::new(
+            Box::new(|_, _| Box::pin(async {})),
+            false,
+        ));
+        let node2 = NodeBuilder::User(UserNodeBuilder::new(
+            Box::new(|_, _| Box::pin(async {})),
+            false,
+        ));
+        let node3 = NodeBuilder::User(UserNodeBuilder::new(
+            Box::new(|_, _| Box::pin(async {})),
+            false,
+        ));
         let builder = WorkflowBuilder::default()
             .add_node(node1)
             .unwrap()
@@ -163,165 +172,179 @@ mod tests {
         let edge_0to1_u8 = Arc::new(Edge::new::<u8>());
         let edge_0to2 = Arc::new(Edge::new::<&str>());
         let edge_0to3 = Arc::new(Edge::new::<&str>());
-        let node0 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
+        let node0 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
 
-                    // タスクの処理
-                    // どこからかデータを取得する
+                        // タスクの処理
+                        // どこからかデータを取得する
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "0 to 1").unwrap();
-                    rg.store(&self_.outputs()[1], 0u8).unwrap();
-                    rg.store(&self_.outputs()[2], "0 to 2").unwrap();
-                    rg.store(&self_.outputs()[3], "0 to 3").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_output(edge_0to1_str.clone())
-        .add_output(edge_0to1_u8.clone())
-        .add_output(edge_0to2.clone())
-        .add_output(edge_0to3.clone());
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "0 to 1").unwrap();
+                        rg.store(&self_.outputs()[1], 0u8).unwrap();
+                        rg.store(&self_.outputs()[2], "0 to 2").unwrap();
+                        rg.store(&self_.outputs()[3], "0 to 3").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_output(edge_0to1_str.clone())
+            .add_output(edge_0to1_u8.clone())
+            .add_output(edge_0to2.clone())
+            .add_output(edge_0to3.clone()),
+        );
         let edge_1to3 = Arc::new(Edge::new::<&str>());
-        let node1 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "0 to 1");
-                    let a: u8 = rg.take(&self_.inputs()[1]).unwrap();
-                    assert_eq!(a, 0u8);
-                    drop(rg);
+        let node1 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "0 to 1");
+                        let a: u8 = rg.take(&self_.inputs()[1]).unwrap();
+                        assert_eq!(a, 0u8);
+                        drop(rg);
 
-                    // タスクの処理
+                        // タスクの処理
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "1 to 3").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_input(edge_0to1_str.clone())
-        .add_input(edge_0to1_u8.clone())
-        .add_output(edge_1to3.clone());
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "1 to 3").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_input(edge_0to1_str.clone())
+            .add_input(edge_0to1_u8.clone())
+            .add_output(edge_1to3.clone()),
+        );
         let edge_2to5 = Arc::new(Edge::new::<&str>());
-        let node2 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "0 to 2");
-                    drop(rg);
+        let node2 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "0 to 2");
+                        drop(rg);
 
-                    // タスクの処理
+                        // タスクの処理
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "2 to 5").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_output(edge_2to5.clone());
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "2 to 5").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_output(edge_2to5.clone()),
+        );
         let edge_3to4 = Arc::new(Edge::new::<&str>());
         let edge_3to5 = Arc::new(Edge::new::<&str>());
-        let node3 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "0 to 3");
-                    let b: &str = rg.take(&self_.inputs()[1]).unwrap();
-                    assert_eq!(b, "1 to 3");
-                    drop(rg);
+        let node3 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "0 to 3");
+                        let b: &str = rg.take(&self_.inputs()[1]).unwrap();
+                        assert_eq!(b, "1 to 3");
+                        drop(rg);
 
-                    // タスクの処理
+                        // タスクの処理
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "3 to 4").unwrap();
-                    rg.store(&self_.outputs()[1], "3 to 5").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_input(edge_0to3.clone())
-        .add_input(edge_1to3.clone())
-        .add_output(edge_3to4.clone())
-        .add_output(edge_3to5.clone());
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "3 to 4").unwrap();
+                        rg.store(&self_.outputs()[1], "3 to 5").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_input(edge_0to3.clone())
+            .add_input(edge_1to3.clone())
+            .add_output(edge_3to4.clone())
+            .add_output(edge_3to5.clone()),
+        );
         let edge_4to5 = Arc::new(Edge::new::<&str>());
-        let node4 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "3 to 4");
-                    drop(rg);
+        let node4 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "3 to 4");
+                        drop(rg);
 
-                    // タスクの処理
+                        // タスクの処理
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "4 to 5").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_input(edge_3to4.clone())
-        .add_output(edge_4to5.clone());
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "4 to 5").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_input(edge_3to4.clone())
+            .add_output(edge_4to5.clone()),
+        );
         let edge_5to6 = Arc::new(Edge::new::<&str>());
-        let node5 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "2 to 5");
-                    let b: &str = rg.take(&self_.inputs()[1]).unwrap();
-                    assert_eq!(b, "3 to 5");
-                    let c: &str = rg.take(&self_.inputs()[2]).unwrap();
-                    assert_eq!(c, "4 to 5");
-                    drop(rg);
+        let node5 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "2 to 5");
+                        let b: &str = rg.take(&self_.inputs()[1]).unwrap();
+                        assert_eq!(b, "3 to 5");
+                        let c: &str = rg.take(&self_.inputs()[2]).unwrap();
+                        assert_eq!(c, "4 to 5");
+                        drop(rg);
 
-                    // タスクの処理
+                        // タスクの処理
 
-                    // 結果の格納
-                    let mut rg = registry.lock().await;
-                    rg.store(&self_.outputs()[0], "5 to 6").unwrap();
-                })
-            }),
-            false,
-        )
-        .add_input(edge_2to5.clone())
-        .add_input(edge_3to5.clone())
-        .add_input(edge_4to5.clone())
-        .add_output(edge_5to6.clone());
-        let node6 = NodeBuilder::new_user(
-            Box::new(|self_, registry| {
-                Box::pin(async {
-                    // 引数の取得
-                    let mut rg = registry.lock().await;
-                    let a: &str = rg.take(&self_.inputs()[0]).unwrap();
-                    assert_eq!(a, "5 to 6");
-                    drop(rg);
+                        // 結果の格納
+                        let mut rg = registry.lock().await;
+                        rg.store(&self_.outputs()[0], "5 to 6").unwrap();
+                    })
+                }),
+                false,
+            )
+            .add_input(edge_2to5.clone())
+            .add_input(edge_3to5.clone())
+            .add_input(edge_4to5.clone())
+            .add_output(edge_5to6.clone()),
+        );
+        let node6 = NodeBuilder::User(
+            UserNodeBuilder::new(
+                Box::new(|self_, registry| {
+                    Box::pin(async {
+                        // 引数の取得
+                        let mut rg = registry.lock().await;
+                        let a: &str = rg.take(&self_.inputs()[0]).unwrap();
+                        assert_eq!(a, "5 to 6");
+                        drop(rg);
 
-                    // タスクの処理
-                    // どこかにデータを送信する
+                        // タスクの処理
+                        // どこかにデータを送信する
 
-                    // 結果の格納
-                })
-            }),
-            false,
-        )
-        .add_input(edge_5to6.clone());
+                        // 結果の格納
+                    })
+                }),
+                false,
+            )
+            .add_input(edge_5to6.clone()),
+        );
 
         let builder = WorkflowBuilder::default()
             .add_node(node0)
