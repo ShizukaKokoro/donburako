@@ -3,16 +3,29 @@
 //! タスクの実行やレジストリの管理を行うプロセッサーを実装するモジュール。
 
 use crate::registry::Registry;
-use crate::workflow::{WorkflowBuilder, WorkflowID};
+use crate::workflow::{WorkflowBuilder, WorkflowError, WorkflowID};
 use log::{debug, info};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::{spawn, task};
 use tokio_util::sync::CancellationToken;
+
+/// プロセッサーエラー
+#[derive(Error, Debug)]
+pub enum ProcessorError {
+    /// ワークフローエラー
+    #[error("workflow error: {0}")]
+    WorkflowError(#[from] WorkflowError),
+
+    /// ワークフローの実行開始エラー
+    #[error("failed to start workflow")]
+    FailedToStartWorkflow,
+}
 
 /// プロセッサービルダー
 #[derive(Default)]
@@ -32,14 +45,14 @@ impl ProcessorBuilder {
     }
 
     /// ビルド
-    pub fn build(self, n: usize) -> Processor {
+    pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
         debug!("Start building processor");
         let (workflow, wf_ids) = {
             let mut workflow = HashMap::new();
             let mut wf_ids = Vec::new();
             for builder in self.workflow {
                 let id = WorkflowID::new();
-                assert!(workflow.insert(id, Arc::new(builder.build())).is_none());
+                assert!(workflow.insert(id, Arc::new(builder.build()?)).is_none());
                 wf_ids.push(id);
             }
             (Arc::new(workflow), wf_ids)
@@ -73,7 +86,11 @@ impl ProcessorBuilder {
                     debug!("Start workflow: {:?}", wf_id);
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
                     rgs.push_back(Some(rg.clone()));
-                    workflow[&wf_id].start(rg.lock().await);
+                    if let Some(wf) = workflow.get(&wf_id) {
+                        wf.start(rg.lock().await)?;
+                    } else {
+                        return Err(ProcessorError::FailedToStartWorkflow);
+                    }
                 }
 
                 debug!("Get nodes enabled to run");
@@ -132,21 +149,22 @@ impl ProcessorBuilder {
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
+            Ok(())
         });
 
-        Processor {
+        Ok(Processor {
             wf_ids,
             handle,
             tx,
             cancel,
-        }
+        })
     }
 }
 
 /// プロセッサー
 pub struct Processor {
     wf_ids: Vec<WorkflowID>,
-    handle: JoinHandle<()>,
+    handle: JoinHandle<Result<(), ProcessorError>>,
     tx: mpsc::Sender<WorkflowID>,
     cancel: CancellationToken,
 }
@@ -173,8 +191,9 @@ impl Processor {
     }
 
     /// プロセッサーの待機
-    pub async fn wait(self) {
+    pub async fn wait(self) -> Result<(), ProcessorError> {
         info!("Wait processor");
-        self.handle.await.unwrap();
+        self.handle.await.unwrap()?;
+        Ok(())
     }
 }
