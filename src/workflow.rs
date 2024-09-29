@@ -174,9 +174,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_workflow() {
-        let node1 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
-        let node2 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
-        let node3 = NodeBuilder::new(Box::new(|_, _| Box::pin(async {})), false);
+        let node1 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
+        let node2 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
+        let node3 = NodeBuilder::new_user(Box::new(|_, _| Box::pin(async {})), false);
         let builder = WorkflowBuilder::default()
             .add_node(node1)
             .unwrap()
@@ -195,7 +195,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_big_workflow() {
-        let node0 = NodeBuilder::new(
+        let node0 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -213,7 +213,7 @@ mod tests {
             }),
             false,
         );
-        let node1 = NodeBuilder::new(
+        let node1 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -233,7 +233,7 @@ mod tests {
             }),
             false,
         );
-        let node2 = NodeBuilder::new(
+        let node2 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -251,7 +251,7 @@ mod tests {
             }),
             false,
         );
-        let node3 = NodeBuilder::new(
+        let node3 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -272,7 +272,7 @@ mod tests {
             }),
             false,
         );
-        let node4 = NodeBuilder::new(
+        let node4 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -290,7 +290,7 @@ mod tests {
             }),
             false,
         );
-        let node5 = NodeBuilder::new(
+        let node5 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得
@@ -312,7 +312,7 @@ mod tests {
             }),
             false,
         );
-        let node6 = NodeBuilder::new(
+        let node6 = NodeBuilder::new_user(
             Box::new(|self_, registry| {
                 Box::pin(async {
                     // 引数の取得

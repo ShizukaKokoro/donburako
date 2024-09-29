@@ -15,12 +15,10 @@ type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Arc<Mutex<Registry>>) -> BoxedFuture
 
 /// ノードビルダー
 ///
-/// ノードを構築するためのビルダー。
-pub struct NodeBuilder {
-    inputs: Vec<Arc<Edge>>,
-    outputs: Vec<Arc<Edge>>,
-    func: Box<AsyncFn>,
-    is_blocking: bool,
+/// ノードを構築するためのビルダー
+pub enum NodeBuilder {
+    /// ユーザーノード
+    UserNode(UserNodeBuilder),
 }
 impl NodeBuilder {
     /// 新しいノードビルダーを生成する
@@ -28,7 +26,40 @@ impl NodeBuilder {
     /// # Arguments
     ///
     /// * `func` - ノードの処理を行う関数(非同期)
-    pub fn new(func: Box<AsyncFn>, is_blocking: bool) -> Self {
+    pub fn new_user(func: Box<AsyncFn>, is_blocking: bool) -> Self {
+        Self::UserNode(UserNodeBuilder::new(func, is_blocking))
+    }
+
+    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
+        match self {
+            Self::UserNode(builder) => builder.add_input(edge),
+        }
+    }
+
+    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
+        match self {
+            Self::UserNode(builder) => builder.add_output(edge),
+        }
+    }
+
+    pub(crate) fn build(self) -> Node {
+        match self {
+            Self::UserNode(builder) => builder.build(),
+        }
+    }
+}
+
+/// ユーザーノードビルダー
+///
+/// ユーザーが任意の処理を行うノードを構築するためのビルダー
+pub struct UserNodeBuilder {
+    inputs: Vec<Arc<Edge>>,
+    outputs: Vec<Arc<Edge>>,
+    func: Box<AsyncFn>,
+    is_blocking: bool,
+}
+impl UserNodeBuilder {
+    fn new(func: Box<AsyncFn>, is_blocking: bool) -> Self {
         Self {
             inputs: Vec::new(),
             outputs: Vec::new(),
@@ -37,15 +68,15 @@ impl NodeBuilder {
         }
     }
 
-    pub(crate) fn add_input(&mut self, edge: Arc<Edge>) {
+    fn add_input(&mut self, edge: Arc<Edge>) {
         self.inputs.push(edge);
     }
 
-    pub(crate) fn add_output(&mut self, edge: Arc<Edge>) {
+    fn add_output(&mut self, edge: Arc<Edge>) {
         self.outputs.push(edge);
     }
 
-    pub(crate) fn build(self) -> Node {
+    fn build(self) -> Node {
         Node {
             inputs: self.inputs,
             outputs: self.outputs,
