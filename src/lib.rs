@@ -44,6 +44,6 @@
 //! ロギング、エラーハンドリング、リトライ、タイムアウトなど、ワークフローの実行に必要な機能を追加する。
 //! ループと条件分岐をサポートする。
 
-#![warn(missing_docs, rustdoc::missing_crate_level_docs)]
+#![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
 pub mod container;
