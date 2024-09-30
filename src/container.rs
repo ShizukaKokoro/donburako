@@ -106,6 +106,13 @@ impl std::fmt::Debug for Container {
             .finish()
     }
 }
+impl Drop for Container {
+    fn drop(&mut self) {
+        #[cfg(not(test))]
+        if self.data.is_some() || self.ty.is_some() {
+            unreachable!();
+        }
+    }
 }
 
 #[cfg(test)]
