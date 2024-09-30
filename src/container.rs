@@ -18,6 +18,10 @@ pub enum ContainerError {
     /// コンテナ内にデータが存在しない
     #[error("Data is not found in the container")]
     DataNotFound,
+
+    /// コンテナ内にデータが存在するのに複製しようとした
+    #[error("Data is found in the container when cloning")]
+    CloningWithData,
 }
 
 /// キャンセルスタック
@@ -99,6 +103,20 @@ impl Container {
         }
         Err(ContainerError::DataNotFound)
     }
+
+    /// コンテナを複製する
+    pub fn clone_container(&self) -> Result<Self, ContainerError> {
+        if self.data.is_some() && self.ty.is_some() {
+            Err(ContainerError::CloningWithData)
+        } else {
+            Ok(Self {
+                data: None,
+                ty: None,
+                stack: self.stack.clone(),
+            })
+        }
+    }
+}
 impl std::fmt::Debug for Container {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Container")
@@ -208,6 +226,19 @@ mod tests {
         let result = container.take::<i32>();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ContainerError::DataNotFound);
+    }
+
+    #[test]
+    fn test_container_clone_container() {
+        let mut container = Container::default();
+        let result = container.clone_container();
+        assert!(result.is_ok());
+
+        container.store(42);
+
+        let result = container.clone_container();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), ContainerError::CloningWithData);
     }
 
     #[test]
