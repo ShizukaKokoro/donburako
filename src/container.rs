@@ -52,6 +52,13 @@ impl CancelStack {
         }
     }
 }
+impl std::fmt::Debug for CancelStack {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CancelStack")
+            .field("len", &self.0.len())
+            .finish()
+    }
+}
 
 /// コンテナ
 ///
@@ -91,6 +98,14 @@ impl Container {
         }
         Err(ContainerError::DataNotFound)
     }
+impl std::fmt::Debug for Container {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Container")
+            .field("data", &self.data)
+            .field("stack", &self.stack)
+            .finish()
+    }
+}
 }
 
 #[cfg(test)]
@@ -185,5 +200,24 @@ mod tests {
         let result = container.take::<i32>();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ContainerError::DataNotFound);
+    }
+
+    #[test]
+    fn test_container_debug() {
+        let mut container = Container::default();
+        container.store(42);
+
+        let debug = format!("{:?}", container);
+        assert_eq!(
+            debug,
+            "Container { data: Some(Any { .. }), stack: CancelStack { len: 0 } }"
+        );
+
+        let container = Container::default();
+        let debug = format!("{:?}", container);
+        assert_eq!(
+            debug,
+            "Container { data: None, stack: CancelStack { len: 0 } }"
+        );
     }
 }
