@@ -8,6 +8,7 @@ authors.workspace = true
 uuid.workspace = true
 tokio = { workspace= true }
 tokio-util.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true
