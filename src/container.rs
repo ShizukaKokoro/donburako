@@ -67,6 +67,7 @@ impl std::fmt::Debug for CancelStack {
 pub struct Container {
     data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
+    stack: CancelStack,
 }
 impl Container {
     /// データを格納する
