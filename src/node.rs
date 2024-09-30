@@ -33,53 +33,35 @@ impl UserNode {
     }
 
     /// 出力ポートの追加
-    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Rc<Connection> {
-        let input = Rc::new(InputPort::new());
-        let con = Rc::new(Connection::new::<T>(input.clone()));
-        input.set_from(Rc::downgrade(&con));
-        let port = Rc::new(OutputPort::new(con.clone()));
-        self.outputs.push(port.clone());
-        con
+    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Rc<InputPort> {
+        let ip = Rc::new(InputPort::new());
+        let op = Rc::new(OutputPort::new::<T>(ip.clone()));
+        ip.set_from(Rc::downgrade(&op));
+        self.outputs.push(op.clone());
+        ip
     }
 }
 
 /// 出力ポート
 #[derive(Debug, PartialEq)]
 pub struct OutputPort {
-    to: Rc<Connection>,
-}
-impl OutputPort {
-    /// 出力ポートの生成
-    fn new(to: Rc<Connection>) -> Self {
-        OutputPort { to }
-    }
-}
-
-/// 接続
-#[derive(Debug, PartialEq)]
-pub struct Connection {
     ty: TypeId,
     to: Rc<InputPort>,
 }
-impl Connection {
-    /// 接続の生成
+impl OutputPort {
+    /// 出力ポートの生成
     fn new<T: 'static + Send + Sync>(to: Rc<InputPort>) -> Self {
-        Connection {
+        OutputPort {
             ty: TypeId::of::<T>(),
             to,
         }
-    }
-
-    /// 入力ポートの取得
-    pub fn to(&self) -> Rc<InputPort> {
-        self.to.clone()
     }
 }
 
 /// 入力ポート
 #[derive(Debug)]
 pub struct InputPort {
-    from: RefCell<Option<Weak<Connection>>>,
+    from: RefCell<Option<Weak<OutputPort>>>,
 }
 impl InputPort {
     /// 入力ポートの生成
@@ -89,7 +71,7 @@ impl InputPort {
         }
     }
 
-    fn set_from(&self, from: Weak<Connection>) {
+    fn set_from(&self, from: Weak<OutputPort>) {
         *self.from.borrow_mut() = Some(from);
     }
 }
@@ -116,17 +98,16 @@ mod tests {
     #[test]
     fn test_connect_nodes() {
         let mut node1 = UserNode::default();
-        let con = node1.add_output::<i32>();
-        let node2 = UserNode::new(vec![con.to()]);
+        let ip = node1.add_output::<i32>();
         assert_eq!(node1.outputs.len(), 1);
         let op = node1.outputs[0].clone();
-        assert_eq!(op.to, con);
-        let con = op.to.clone();
-        assert_eq!(con.ty, TypeId::of::<i32>());
-        let ip = con.to.clone();
+        assert_eq!(op.to, ip);
+        assert_eq!(op.ty, TypeId::of::<i32>());
+        let node2 = UserNode::new(vec![ip.clone()]);
+        let ip = op.to.clone();
         assert_eq!(node2.inputs.len(), 1);
         assert_eq!(ip, node2.inputs[0]);
-        let con = ip.from.borrow().as_ref().unwrap().upgrade().unwrap();
-        assert_eq!(ip, con.to());
+        let op = ip.from.borrow().as_ref().unwrap().upgrade().unwrap();
+        assert_eq!(ip, op.to);
     }
 }
