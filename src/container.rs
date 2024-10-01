@@ -5,7 +5,6 @@
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
 use std::any::{Any, TypeId};
-use std::sync::Arc;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
@@ -72,7 +71,7 @@ impl std::fmt::Debug for CancelStack {
 pub struct Container {
     data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
-    stack: Arc<CancelStack>,
+    stack: CancelStack,
 }
 impl Container {
     /// データを格納する
@@ -116,6 +115,25 @@ impl Container {
                 stack: self.stack.clone(),
             })
         }
+    }
+
+    /// キャンセルトークンを追加する
+    ///
+    /// # Arguments
+    ///
+    /// * `token` - キャンセルトークン
+    pub fn push_cancel_token(&mut self, token: CancellationToken) {
+        self.stack.push(token);
+    }
+
+    /// キャンセルする
+    pub fn cancel(&mut self) {
+        self.stack.cancel();
+    }
+
+    /// キャンセルを確認する
+    pub fn check_cancel(&mut self) -> bool {
+        self.stack.check()
     }
 }
 impl std::fmt::Debug for Container {
@@ -259,5 +277,18 @@ mod tests {
             debug,
             "Container { data: None, stack: CancelStack { len: 0 } }"
         );
+    }
+
+    #[test]
+    fn test_container_cancel() {
+        let mut con0 = Container::default();
+        con0.push_cancel_token(CancellationToken::new());
+        let mut con1 = con0.clone_container().unwrap();
+        assert_eq!(con1.stack.0.len(), 1);
+        assert!(!con1.check_cancel());
+        con0.cancel();
+        assert_eq!(con0.stack.0.len(), 0);
+        assert_eq!(con1.stack.0.len(), 1);
+        assert!(con1.check_cancel());
     }
 }
