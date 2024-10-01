@@ -10,6 +10,7 @@
 use std::any::TypeId;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
+use uuid::Uuid;
 
 /// ノード
 pub enum Node {
@@ -80,12 +81,14 @@ impl OutputPort {
 /// 出力ポートからのデータを受け取るために、出力ポートを参照している。
 #[derive(Debug)]
 pub struct InputPort {
+    id: Uuid,
     from: RefCell<Option<Weak<OutputPort>>>,
 }
 impl InputPort {
     /// 入力ポートの生成
     fn new() -> Self {
         InputPort {
+            id: Uuid::new_v4(),
             from: RefCell::new(None),
         }
     }
@@ -96,17 +99,13 @@ impl InputPort {
 }
 impl PartialEq for InputPort {
     fn eq(&self, other: &Self) -> bool {
-        let s_from = self.from.borrow();
-        let o_from = other.from.borrow();
-        if let Some(s_from) = &*s_from {
-            if let Some(o_from) = &*o_from {
-                Rc::ptr_eq(&s_from.upgrade().unwrap(), &o_from.upgrade().unwrap())
-            } else {
-                false
-            }
-        } else {
-            o_from.is_none()
-        }
+        self.id == other.id
+    }
+}
+impl Eq for InputPort {}
+impl std::hash::Hash for InputPort {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
     }
 }
 
