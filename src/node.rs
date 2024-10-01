@@ -18,6 +18,11 @@ pub enum Node {
 }
 
 /// ユーザー定義ノード
+///
+/// ユーザーが定義した任意の処理を実行するノード。
+/// その処理を一つの関数だとした時に、その関数が受け取る引数の数だけ入力ポートが必要になる。
+/// また、その関数が返す値の数だけ出力ポートが必要になる。
+/// 全ての入力ポートにデータが来るまで、ノードは実行されない。
 #[derive(Debug, Default, PartialEq)]
 pub struct UserNode {
     inputs: Vec<Rc<InputPort>>,
@@ -44,6 +49,8 @@ impl UserNode {
 }
 
 /// 出力ポート
+///
+/// 他のポートにデータを送るポート。
 #[derive(Debug, PartialEq)]
 pub struct OutputPort {
     to: Rc<Connection>,
@@ -77,6 +84,10 @@ impl Connection {
 }
 
 /// 入力ポート
+///
+/// 他のポートからデータを受け取るポート。
+/// ワークフローはそれぞれの入力ポートがどのノードのポートかを知っている必要がある。
+/// 出力ポートからのデータを受け取るために、出力ポートを参照している。
 #[derive(Debug)]
 pub struct InputPort {
     from: RefCell<Option<Weak<Connection>>>,
