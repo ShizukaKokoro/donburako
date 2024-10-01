@@ -5,6 +5,7 @@
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
 use std::any::{Any, TypeId};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
@@ -71,7 +72,7 @@ impl std::fmt::Debug for CancelStack {
 pub struct Container {
     data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
-    stack: CancelStack,
+    stack: Arc<CancelStack>,
 }
 impl Container {
     /// データを格納する
