@@ -55,8 +55,8 @@ impl UserNode {
 
     /// 出力ポートの追加
     pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Rc<InputPort> {
-        let ip = Rc::new(InputPort::new());
-        let op = Rc::new(OutputPort::new::<T>(ip.clone()));
+        let ip = Rc::new(InputPort::new::<T>());
+        let op = Rc::new(OutputPort::new(ip.clone()));
         self.outputs.push(op.clone());
         ip
     }
@@ -67,16 +67,12 @@ impl UserNode {
 /// 他のポートにデータを送るポート。
 #[derive(Debug, PartialEq)]
 pub struct OutputPort {
-    ty: TypeId,
     to: Rc<InputPort>,
 }
 impl OutputPort {
     /// 出力ポートの生成
-    fn new<T: 'static + Send + Sync>(to: Rc<InputPort>) -> Self {
-        OutputPort {
-            ty: TypeId::of::<T>(),
-            to,
-        }
+    fn new(to: Rc<InputPort>) -> Self {
+        OutputPort { to }
     }
 
     /// この出力ポートがどの入力ポートに接続されているかを取得
@@ -92,12 +88,16 @@ impl OutputPort {
 /// 出力ポートからのデータを受け取るために、出力ポートを参照している。
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct InputPort {
+    ty: TypeId,
     id: Uuid,
 }
 impl InputPort {
     /// 入力ポートの生成
-    fn new() -> Self {
-        InputPort { id: Uuid::new_v4() }
+    pub fn new<T: 'static + Send + Sync>() -> Self {
+        InputPort {
+            ty: TypeId::of::<T>(),
+            id: Uuid::new_v4(),
+        }
     }
 }
 
@@ -112,10 +112,10 @@ mod tests {
         assert_eq!(node1.outputs.len(), 1);
         let op = node1.outputs[0].clone();
         assert_eq!(op.to, ip);
-        assert_eq!(op.ty, TypeId::of::<i32>());
         let node2 = UserNode::new(vec![ip.clone()]);
         let ip = op.to.clone();
         assert_eq!(node2.inputs.len(), 1);
+        assert_eq!(ip.ty, TypeId::of::<i32>());
         assert_eq!(ip, node2.inputs[0]);
     }
 }
