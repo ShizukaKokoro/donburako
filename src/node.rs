@@ -24,6 +24,13 @@ impl Node {
             Node::User(node) => &node.inputs,
         }
     }
+
+    /// 出力ポートの取得
+    pub fn outputs(&self) -> &Vec<Rc<OutputPort>> {
+        match self {
+            Node::User(node) => &node.outputs,
+        }
+    }
 }
 
 /// ユーザー定義ノード
