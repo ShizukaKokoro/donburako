@@ -79,6 +79,11 @@ impl OutputPort {
             to,
         }
     }
+
+    /// この出力ポートがどの入力ポートに接続されているかを取得
+    pub fn input(&self) -> Rc<InputPort> {
+        self.to.clone()
+    }
 }
 
 /// 入力ポート
