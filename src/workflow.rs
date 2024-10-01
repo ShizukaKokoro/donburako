@@ -2,7 +2,7 @@
 //!
 //! ワークフローはノードからなる有向グラフ。
 
-use crate::node::{InputPort, Node, OutputPort};
+use crate::node::{Edge, Node};
 use std::{collections::HashMap, rc::Rc};
 use thiserror::Error;
 
@@ -32,30 +32,35 @@ impl WorkflowBuilder {
 
     /// ワークフローの生成
     pub fn build(self) -> Workflow {
-        let mut node_map = HashMap::new();
-        let mut from_map = HashMap::new();
+        let mut input_to_node = HashMap::new();
+        let mut output_to_node = HashMap::new();
 
-        for node in self.nodes {
+        for node in self.nodes.iter() {
             for input in node.inputs() {
-                let _ = node_map.insert(input.clone(), node.clone());
+                let _ = input_to_node.insert(input.clone(), node.clone());
             }
+        }
+        for node in self.nodes.iter() {
             for output in node.outputs() {
-                let input = output.input();
-                let _ = from_map.insert(input.clone(), output.clone());
+                let node_from = input_to_node.get(output).unwrap();
+                let _ = output_to_node.insert(output.clone(), node_from.clone());
             }
         }
 
-        Workflow { node_map, from_map }
+        Workflow {
+            input_to_node,
+            output_to_node,
+        }
     }
 }
 
 /// ワークフロー
 pub struct Workflow {
-    /// InputPort から Node へのマップ
-    node_map: HashMap<Rc<InputPort>, Rc<Node>>,
+    /// Edge を入力に持つ Node へのマップ
+    input_to_node: HashMap<Rc<Edge>, Rc<Node>>,
 
-    /// InputPort から OutputPort への逆マップ
-    from_map: HashMap<Rc<InputPort>, Rc<OutputPort>>,
+    /// Edge から出力する Node へのマップ
+    output_to_node: HashMap<Rc<Edge>, Rc<Node>>,
 }
 
 #[cfg(test)]
@@ -70,8 +75,8 @@ mod tests {
             .add_node(node.clone())
             .unwrap()
             .build();
-        assert_eq!(wf.node_map.len(), 0);
-        assert_eq!(wf.from_map.len(), 0);
+        assert_eq!(wf.input_to_node.len(), 0);
+        assert_eq!(wf.output_to_node.len(), 0);
     }
 
     #[test]
@@ -87,15 +92,15 @@ mod tests {
     #[test]
     fn test_workflow_builder_multi_node() {
         let mut node0 = UserNode::default();
-        let ip = node0.add_output::<i32>();
-        let node1 = UserNode::new(vec![ip.clone()]);
+        let edge = node0.add_output::<i32>();
+        let node1 = UserNode::new(vec![edge.clone()]);
         let wf = WorkflowBuilder::default()
             .add_node(Rc::new(Node::User(node0)))
             .unwrap()
             .add_node(Rc::new(Node::User(node1)))
             .unwrap()
             .build();
-        assert_eq!(wf.node_map.len(), 1);
-        assert_eq!(wf.from_map.len(), 1);
+        assert_eq!(wf.input_to_node.len(), 1);
+        assert_eq!(wf.output_to_node.len(), 1);
     }
 }
