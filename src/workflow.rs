@@ -12,6 +12,10 @@ pub enum WorkflowError {
     /// ノードがすでに追加されている
     #[error("Node is already added")]
     NodeIsAlreadyAdded,
+
+    /// エッジが無効
+    #[error("The edge is not connected to any node")]
+    InvalidEdge,
 }
 
 /// ワークフロービルダー
@@ -63,6 +67,29 @@ pub struct Workflow {
     /// Edge から出力する Node へのマップ
     output_to_node: HashMap<Rc<Edge>, Rc<Node>>,
 }
+impl Workflow {
+    /// ワークフローの開始
+    ///
+    /// 何度も
+    pub fn start(&self, edge: Rc<Edge>) -> Result<Rc<Node>, WorkflowError> {
+        if let Some(node) = self.input_to_node.get(&edge) {
+            Ok(node.clone())
+        } else {
+            Err(WorkflowError::InvalidEdge)
+        }
+    }
+
+    /// ノードの完了と次のノードの取得
+    pub fn done(&self, node: Rc<Node>) -> Result<Vec<Rc<Node>>, WorkflowError> {
+        let mut next_nodes = vec![];
+        for output in node.outputs() {
+            if let Some(next_node) = self.output_to_node.get(output) {
+                next_nodes.push(next_node.clone());
+            }
+        }
+        Ok(next_nodes)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -103,5 +130,48 @@ mod tests {
             .build();
         assert_eq!(wf.input_to_node.len(), 1);
         assert_eq!(wf.output_to_node.len(), 1);
+    }
+
+    #[test]
+    fn test_workflow_start() {
+        let edge = Rc::new(Edge::new::<i32>());
+        let node0 = UserNode::new(vec![edge.clone()]);
+        let node0_rc = Rc::new(Node::User(node0));
+        let wf = WorkflowBuilder::default()
+            .add_node(node0_rc.clone())
+            .unwrap()
+            .build();
+        let node = wf.start(edge.clone()).unwrap();
+        assert_eq!(node, node0_rc);
+    }
+
+    #[test]
+    fn test_workflow_start_invalid_edge() {
+        let mut node0 = UserNode::default();
+        let edge = node0.add_output::<i32>();
+        let node0_rc = Rc::new(Node::User(node0));
+        let wf = WorkflowBuilder::default()
+            .add_node(node0_rc.clone())
+            .unwrap()
+            .build();
+        let node_err = wf.start(edge.clone());
+        assert_eq!(node_err.err(), Some(WorkflowError::InvalidEdge));
+    }
+
+    #[test]
+    fn test_workflow_done() {
+        let mut node0 = UserNode::default();
+        let edge = node0.add_output::<i32>();
+        let node1 = UserNode::new(vec![edge.clone()]);
+        let node0_rc = Rc::new(Node::User(node0));
+        let node1_rc = Rc::new(Node::User(node1));
+        let wf = WorkflowBuilder::default()
+            .add_node(node0_rc.clone())
+            .unwrap()
+            .add_node(node1_rc.clone())
+            .unwrap()
+            .build();
+        let next_nodes = wf.done(node0_rc).unwrap();
+        assert_eq!(next_nodes, vec![node1_rc]);
     }
 }
