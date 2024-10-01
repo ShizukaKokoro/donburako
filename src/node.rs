@@ -8,11 +8,11 @@
 //! ポートとポートを繋いでいく。
 
 use std::any::TypeId;
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use uuid::Uuid;
 
 /// ノード
+#[derive(Debug, PartialEq)]
 pub enum Node {
     /// ユーザー定義ノード
     User(UserNode),
@@ -57,7 +57,6 @@ impl UserNode {
     pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Rc<InputPort> {
         let ip = Rc::new(InputPort::new());
         let op = Rc::new(OutputPort::new::<T>(ip.clone()));
-        ip.set_from(Rc::downgrade(&op));
         self.outputs.push(op.clone());
         ip
     }
@@ -91,33 +90,14 @@ impl OutputPort {
 /// 他のポートからデータを受け取るポート。
 /// ワークフローはそれぞれの入力ポートがどのノードのポートかを知っている必要がある。
 /// 出力ポートからのデータを受け取るために、出力ポートを参照している。
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct InputPort {
     id: Uuid,
-    from: RefCell<Option<Weak<OutputPort>>>,
 }
 impl InputPort {
     /// 入力ポートの生成
     fn new() -> Self {
-        InputPort {
-            id: Uuid::new_v4(),
-            from: RefCell::new(None),
-        }
-    }
-
-    fn set_from(&self, from: Weak<OutputPort>) {
-        *self.from.borrow_mut() = Some(from);
-    }
-}
-impl PartialEq for InputPort {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-impl Eq for InputPort {}
-impl std::hash::Hash for InputPort {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
+        InputPort { id: Uuid::new_v4() }
     }
 }
 
@@ -137,7 +117,5 @@ mod tests {
         let ip = op.to.clone();
         assert_eq!(node2.inputs.len(), 1);
         assert_eq!(ip, node2.inputs[0]);
-        let op = ip.from.borrow().as_ref().unwrap().upgrade().unwrap();
-        assert_eq!(ip, op.to);
     }
 }
