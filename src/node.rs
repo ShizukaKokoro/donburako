@@ -16,6 +16,14 @@ pub enum Node {
     /// ユーザー定義ノード
     User(UserNode),
 }
+impl Node {
+    /// 入力ポートの取得
+    pub fn inputs(&self) -> &Vec<Rc<InputPort>> {
+        match self {
+            Node::User(node) => &node.inputs,
+        }
+    }
+}
 
 /// ユーザー定義ノード
 ///
