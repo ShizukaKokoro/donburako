@@ -42,8 +42,9 @@ impl WorkflowBuilder {
         }
         for node in self.nodes.iter() {
             for output in node.outputs() {
-                let node_from = input_to_node.get(output).unwrap();
-                let _ = output_to_node.insert(output.clone(), node_from.clone());
+                if let Some(node_from) = input_to_node.get(output) {
+                    let _ = output_to_node.insert(output.clone(), node_from.clone());
+                }
             }
         }
 
