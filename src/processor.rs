@@ -48,26 +48,25 @@ impl ProcessorBuilder {
             }
             workflow
         };
+        let mut handles: Vec<Option<JoinHandle<Result<(), ProcessorError>>>> =
+            Vec::with_capacity(n);
+        for _ in 0..n {
+            handles.push(None);
+        }
+        let mut retains = {
+            let mut retains = VecDeque::new();
+            for i in 0..n {
+                retains.push_back(i);
+            }
+            retains
+        };
+        let mut cons: HashMap<Rc<Edge>, Container> = HashMap::new();
+        debug!("End setting up processor: capacity={}", n);
 
         let (tx, mut rx): (mpsc::Sender<usize>, mpsc::Receiver<usize>) = mpsc::channel(16);
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
-            let mut handles: Vec<Option<JoinHandle<Result<(), ProcessorError>>>> =
-                Vec::with_capacity(n);
-            for _ in 0..n {
-                handles.push(None);
-            }
-            let mut retains = {
-                let mut retains = VecDeque::new();
-                for i in 0..n {
-                    retains.push_back(i);
-                }
-                retains
-            };
-            let mut cons: HashMap<Rc<Edge>, Container> = HashMap::new();
-            debug!("End setting up processor: capacity={}", n);
-
             loop {
                 if cancel_clone.is_cancelled() {
                     break;
