@@ -82,7 +82,7 @@ impl ProcessorBuilder {
                 todo!(); // TODO: ワークフローの次に実行可能なノードを取得し、タスクのスレッドを handles に追加する
 
                 debug!("Check running tasks");
-                for (key, item) in handles.iter_mut().enumerate().take(n) {
+                for (key, item) in handles.iter_mut().enumerate() {
                     if let Some(handle) = item {
                         tokio::select! {
                             // タスクが終了した場合
