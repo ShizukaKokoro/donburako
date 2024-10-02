@@ -80,6 +80,12 @@ impl std::cmp::PartialEq for Node {
         self.id == other.id
     }
 }
+impl std::cmp::Eq for Node {}
+impl std::hash::Hash for Node {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 /// ノードの種類
 #[derive(Debug)]
