@@ -166,7 +166,7 @@ impl Drop for Container {
     fn drop(&mut self) {
         #[cfg(not(test))]
         if self.has_data() {
-            unreachable!();
+            unreachable!("Container is dropped with data (type: {:?})", self.ty);
         }
     }
 }
