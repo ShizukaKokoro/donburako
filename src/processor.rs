@@ -45,8 +45,12 @@ impl<T> Handlers<T> {
 
     fn iter(
         &mut self,
-    ) -> impl Iterator<Item = (usize, &mut Option<JoinHandle<Result<T, ProcessorError>>>)> {
-        self.handles.iter_mut().enumerate()
+    ) -> impl Iterator<Item = (usize, &mut JoinHandle<Result<T, ProcessorError>>)> {
+        self.handles
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, handle)| handle.is_some())
+            .map(|(key, handle)| (key, handle.as_mut().unwrap()))
     }
 
     fn remove(&mut self, key: usize) {
@@ -106,9 +110,8 @@ impl ProcessorBuilder {
 
                 let mut finished = Vec::new();
                 debug!("Check running tasks");
-                for (key, item) in handlers.iter() {
-                    if let Some(handle) = item {
-                        tokio::select! {
+                for (key, handle) in handlers.iter() {
+                    tokio::select! {
                             // タスクが終了した場合
                             res = handle => {
                                 debug!("Task is done(at {} / {})", key, n);
@@ -117,7 +120,6 @@ impl ProcessorBuilder {
                             }
                             // タスクが終了していない場合
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
-                        }
                     }
                 }
                 for key in finished {
@@ -179,17 +181,33 @@ mod tests {
         handlers.push(handle1);
         handlers.push(handle2);
 
-        for (_, handle) in handlers.iter() {
-            assert!(handle.is_some());
-        }
+        assert_eq!(handlers.handles.len(), 3);
 
         handlers.remove(0);
         handlers.remove(1);
         handlers.remove(2);
 
-        for (_, handle) in handlers.iter() {
-            assert!(handle.is_none());
+        assert_eq!(handlers.handles.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_handlers_iter_filtered() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(0) });
+        let handle1 = spawn(async { Ok(1) });
+        let handle2 = spawn(async { Ok(2) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+        handlers.remove(1);
+
+        let mut iter_key = Vec::new();
+        for (key, _) in handlers.iter() {
+            iter_key.push(key);
         }
+
+        assert_eq!(iter_key, vec![0, 2]);
     }
 
     #[tokio::test]
@@ -209,11 +227,9 @@ mod tests {
         let mut iter_index = Vec::new();
 
         for (key, handle) in handlers.iter() {
-            if let Some(handle) = handle {
-                tokio::select! {
+            tokio::select! {
                     res = handle => {
                         iter_index.push((key,res.unwrap().unwrap()));
-                    }
                 }
             }
         }
