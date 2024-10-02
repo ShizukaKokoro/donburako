@@ -73,6 +73,17 @@ impl Workflow {
         }
     }
 
+    /// エッジからノードを取得
+    ///
+    /// 指定されたエッジが入力になっているノードを取得する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Rc<Node>> {
+        self.input_to_node.get(edge).cloned()
+    }
+
     /// ノードの完了と次のノードの取得
     ///
     /// 終了したノードから次のノードを取得する。
@@ -158,6 +169,19 @@ mod tests {
             .build();
         let node_err = wf.start(edge.clone());
         assert_eq!(node_err.err(), Some(WorkflowError::InvalidEdge));
+    }
+
+    #[test]
+    fn test_workflow_get_node() {
+        let edge = Arc::new(Edge::new::<i32>());
+        let node0 = UserNode::new_test(vec![edge.clone()]);
+        let node0_rc = Rc::new(node0.to_node());
+        let wf = WorkflowBuilder::default()
+            .add_node(node0_rc.clone())
+            .unwrap()
+            .build();
+        let node = wf.get_node(&edge).unwrap();
+        assert_eq!(node, node0_rc);
     }
 
     #[test]
