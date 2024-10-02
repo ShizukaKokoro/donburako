@@ -77,6 +77,15 @@ pub struct Container {
     stack: CancelStack,
 }
 impl Container {
+    /// コンテナ内にデータが格納されているか確認する
+    fn has_data(&self) -> bool {
+        match (self.data.is_some(), self.ty.is_some()) {
+            (true, true) => true,
+            (false, false) => false,
+            _ => unreachable!(),
+        }
+    }
+
     /// データを格納する
     ///
     /// # Arguments
@@ -109,7 +118,7 @@ impl Container {
 
     /// コンテナを複製する
     pub fn clone_container(&self) -> Result<Self, ContainerError> {
-        if self.data.is_some() && self.ty.is_some() {
+        if self.has_data() {
             Err(ContainerError::CloningWithData)
         } else {
             Ok(Self {
@@ -150,7 +159,7 @@ impl std::fmt::Debug for Container {
 impl Drop for Container {
     fn drop(&mut self) {
         #[cfg(not(test))]
-        if self.data.is_some() || self.ty.is_some() {
+        if self.has_data() {
             unreachable!();
         }
     }
