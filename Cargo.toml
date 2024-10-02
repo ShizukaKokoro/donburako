@@ -6,9 +6,10 @@ authors.workspace = true
 
 [dependencies]
 uuid.workspace = true
-tokio = { workspace= true }
+tokio = { workspace = true }
 tokio-util.workspace = true
 thiserror.workspace = true
+log.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

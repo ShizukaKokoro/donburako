@@ -60,4 +60,5 @@
 
 pub mod container;
 pub mod node;
+pub mod processor;
 pub mod workflow;
