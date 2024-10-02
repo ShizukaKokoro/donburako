@@ -111,6 +111,7 @@ impl Container {
             if let Some(ty) = self.ty {
                 if ty == TypeId::of::<T>() {
                     if let Ok(data) = data.downcast::<T>() {
+                        self.ty = None;
                         return Ok(*data);
                     }
                 } else {
@@ -353,6 +354,18 @@ mod tests {
 
         let data = container.take::<i32>().unwrap();
         assert_eq!(data, 42);
+    }
+
+    #[test]
+    fn test_container_has_map() {
+        let mut container = Container::default();
+        assert!(!container.has_data());
+
+        container.store(42);
+        assert!(container.has_data());
+
+        let _ = container.take::<i32>();
+        assert!(!container.has_data());
     }
 
     #[test]
