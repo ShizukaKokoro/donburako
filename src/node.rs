@@ -108,14 +108,16 @@ pub struct UserNode {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
+    is_blocking: bool,
 }
 impl UserNode {
     /// ノードの生成
-    pub fn new(inputs: Vec<Arc<Edge>>, func: Box<AsyncFn>) -> Self {
+    pub fn new(inputs: Vec<Arc<Edge>>, func: Box<AsyncFn>, is_blocking: bool) -> Self {
         UserNode {
             inputs,
             outputs: Vec::new(),
             func,
+            is_blocking,
         }
     }
 
@@ -126,6 +128,7 @@ impl UserNode {
             inputs,
             outputs: Vec::new(),
             func: Box::new(|_, _| Box::pin(async {})),
+            is_blocking: false,
         }
     }
 
@@ -144,6 +147,11 @@ impl UserNode {
     /// 出力エッジの取得
     pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         &self.outputs
+    }
+
+    /// ブロッキングノードかどうか
+    pub fn is_blocking(&self) -> bool {
+        self.is_blocking
     }
 
     /// ノードに変換
