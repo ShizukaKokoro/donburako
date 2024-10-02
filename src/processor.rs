@@ -21,6 +21,40 @@ pub enum ProcessorError {
     FailedToStartWorkflow,
 }
 
+/// ハンドラ管理
+struct Handlers<T> {
+    handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>>,
+    retains: VecDeque<usize>,
+}
+impl<T> Handlers<T> {
+    fn new(n: usize) -> Self {
+        let mut handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>> = Vec::with_capacity(n);
+        let mut retains = VecDeque::new();
+        for i in 0..n {
+            retains.push_back(i);
+            handles.push(None);
+        }
+        Self { handles, retains }
+    }
+
+    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>) {
+        if let Some(retain) = self.retains.pop_front() {
+            self.handles[retain] = Some(handle);
+        }
+    }
+
+    fn iter(
+        &mut self,
+    ) -> impl Iterator<Item = (usize, &mut Option<JoinHandle<Result<T, ProcessorError>>>)> {
+        self.handles.iter_mut().enumerate()
+    }
+
+    fn remove(&mut self, key: usize) {
+        self.retains.push_back(key);
+        self.handles[key] = None;
+    }
+}
+
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
@@ -134,5 +168,71 @@ impl Processor {
         info!("Wait processor");
         self.handle.await.unwrap()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[tokio::test]
+    async fn test_handlers() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(()) });
+        let handle1 = spawn(async { Ok(()) });
+        let handle2 = spawn(async { Ok(()) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+
+        for (_, handle) in handlers.iter() {
+            assert!(handle.is_some());
+        }
+
+        handlers.remove(0);
+        handlers.remove(1);
+        handlers.remove(2);
+
+        for (_, handle) in handlers.iter() {
+            assert!(handle.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handlers_remove() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(0) });
+        let handle1 = spawn(async { Ok(1) });
+        let handle2 = spawn(async { Ok(2) });
+        let handle3 = spawn(async { Ok(3) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+        handlers.remove(1);
+        handlers.push(handle3);
+
+        let mut iter_index = Vec::new();
+
+        for (key, handle) in handlers.iter() {
+            if let Some(handle) = handle {
+                tokio::select! {
+                    res = handle => {
+                        iter_index.push((key,res.unwrap().unwrap()));
+                    }
+                }
+            }
+        }
+        assert_eq!(iter_index, vec![(0, 0), (1, 3), (2, 2)]);
+
+        handlers.remove(0);
+        handlers.remove(1);
+        handlers.remove(2);
+        assert!(handlers.handles[0].is_none());
+        assert!(handlers.handles[1].is_none());
+        assert!(handlers.handles[2].is_none());
+        assert_eq!(handlers.retains.len(), 3);
     }
 }
