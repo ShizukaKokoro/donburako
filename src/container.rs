@@ -177,7 +177,7 @@ impl Drop for Container {
 /// 外部からはエッジを参照して、コンテナを取り出すことができる。
 ///
 /// 内部に状態をもつため、実行順に影響を受ける。
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct ContainerMap {
     // TODO: コンテナの ID を参照して、コンテナを貯められるようにする
     map: Arc<Mutex<HashMap<Rc<Edge>, Container>>>,
