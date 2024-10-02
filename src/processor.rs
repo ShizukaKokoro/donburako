@@ -82,18 +82,7 @@ impl ProcessorBuilder {
             }
             workflow
         };
-        let mut handles: Vec<Option<JoinHandle<Result<(), ProcessorError>>>> =
-            Vec::with_capacity(n);
-        for _ in 0..n {
-            handles.push(None);
-        }
-        let mut retains = {
-            let mut retains = VecDeque::new();
-            for i in 0..n {
-                retains.push_back(i);
-            }
-            retains
-        };
+        let mut handlers: Handlers<()> = Handlers::new(n);
         let mut cons: HashMap<Rc<Edge>, Container> = HashMap::new();
         debug!("End setting up processor: capacity={}", n);
 
@@ -115,21 +104,24 @@ impl ProcessorBuilder {
                 debug!("Get nodes enabled to run");
                 todo!(); // TODO: ワークフローの次に実行可能なノードを取得し、タスクのスレッドを handles に追加する
 
+                let mut finished = Vec::new();
                 debug!("Check running tasks");
-                for (key, item) in handles.iter_mut().enumerate() {
+                for (key, item) in handlers.iter() {
                     if let Some(handle) = item {
                         tokio::select! {
                             // タスクが終了した場合
                             res = handle => {
                                 debug!("Task is done(at {} / {})", key, n);
-                                retains.push_back(key);
                                 todo!(); // TODO: タスクの終了処理を行う
-                                *item= None; // タスクハンドルをクリア
+                                finished.push(key);
                             }
                             // タスクが終了していない場合
                             _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
                         }
                     }
+                }
+                for key in finished {
+                    handlers.remove(key);
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
             }
