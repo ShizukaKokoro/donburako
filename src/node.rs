@@ -120,6 +120,7 @@ impl UserNode {
     }
 
     /// テスト用のノードの生成
+    #[cfg(test)]
     pub fn new_test(inputs: Vec<Arc<Edge>>) -> Self {
         UserNode {
             inputs,
