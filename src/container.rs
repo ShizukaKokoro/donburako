@@ -7,7 +7,7 @@
 // TODO: コンテナが、他のワークフローの実行中のコンテナと競合しないように ID を紐づける
 // TODO: 同じワークフロー内の異なるイテレーションで競合しないように、イテレーション番号を紐づける(0 から始まる usize)
 
-use crate::node::{Edge, Node};
+use crate::node::{Edge, Node, NodeType};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -231,8 +231,8 @@ impl ContainerMap {
     ///
     /// 実行可能な場合は true、そうでない場合は false
     pub async fn check_node_executable(&self, node: &Rc<Node>) -> bool {
-        match node.as_ref() {
-            Node::User(node) => {
+        match node.kind() {
+            NodeType::User(node) => {
                 let mut result = true;
                 for edge in node.inputs() {
                     if !self.check_edge_exists(edge).await {
@@ -282,7 +282,7 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{Edge, Node, UserNode};
+    use crate::node::{Edge, Node, NodeType, UserNode};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -446,10 +446,10 @@ mod tests {
         let edge1 = Rc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), 42).await.unwrap();
 
-        let node = Rc::new(Node::User(UserNode::new(vec![
+        let node = Rc::new(Node::new(NodeType::User(UserNode::new(vec![
             edge0.clone(),
             edge1.clone(),
-        ])));
+        ]))));
         assert!(!map.check_node_executable(&node).await);
 
         map.add_new_container(edge1.clone(), "42").await.unwrap();

@@ -10,26 +10,79 @@ use std::any::TypeId;
 use std::rc::Rc;
 use uuid::Uuid;
 
+/// ノードID
+#[derive(Default, Debug, PartialEq, Eq, Hash)]
+pub struct NodeId(Uuid);
+impl NodeId {
+    /// ノードIDの生成
+    pub fn new() -> Self {
+        NodeId(Uuid::new_v4())
+    }
+}
+
 /// ノード
-#[derive(Debug, PartialEq)]
-pub enum Node {
-    /// ユーザー定義ノード
-    User(UserNode),
+///
+/// NOTE: サイズが大きめ？
+#[derive(Debug)]
+pub struct Node {
+    id: NodeId,
+    kind: NodeType,
 }
 impl Node {
+    /// ノードの生成
+    pub fn new(kind: NodeType) -> Self {
+        Node {
+            id: NodeId::new(),
+            kind,
+        }
+    }
+
+    /// ノードの実行
+    ///
+    /// ノードの種類に応じた処理を実行する。
+    ///
+    /// # Arguments
+    ///
+    /// * `container_map` - コンテナマップ
+    pub async fn run(&self, container_map: &ContainerMap) {
+        match &self.kind {
+            NodeType::User(node) => {
+                let func = &node.func;
+                func(node, container_map).await;
+            }
+        }
+    }
+
     /// 入力エッジの取得
     pub fn inputs(&self) -> &Vec<Rc<Edge>> {
-        match self {
-            Node::User(node) => node.inputs(),
+        match &self.kind {
+            NodeType::User(node) => node.inputs(),
         }
     }
 
     /// 出力エッジの取得
     pub fn outputs(&self) -> &Vec<Rc<Edge>> {
-        match self {
-            Node::User(node) => node.outputs(),
+        match &self.kind {
+            NodeType::User(node) => node.outputs(),
         }
     }
+
+    /// ノードの種類の取得
+    pub fn kind(&self) -> &NodeType {
+        &self.kind
+    }
+}
+impl std::cmp::PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+/// ノードの種類
+#[derive(Debug)]
+pub enum NodeType {
+    /// ユーザー定義ノード
+    User(UserNode),
 }
 
 /// ユーザー定義ノード
