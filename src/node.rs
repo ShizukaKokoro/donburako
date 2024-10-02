@@ -6,7 +6,10 @@
 //! ノードは実行時に、コンテナが保存されている構造体を受け取り、その中のデータを読み書きすることになる。
 //! ノード同士の繋がりはエッジによって表される。
 
+use crate::container::ContainerMap;
 use std::any::TypeId;
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
 use uuid::Uuid;
 
@@ -85,23 +88,37 @@ pub enum NodeType {
     User(UserNode),
 }
 
+type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+
+type AsyncFn = dyn for<'a> Fn(&'a UserNode, &'a ContainerMap) -> BoxedFuture<'a> + Send + Sync;
+
 /// ユーザー定義ノード
 ///
 /// ユーザーが定義した任意の処理を実行するノード。
 /// その処理を一つの関数だとした時に、その関数が受け取る引数の数だけ入力エッジが必要になる。
 /// また、その関数が返す値の数だけ出力エッジが必要になる。
 /// 全ての入力エッジにデータが来るまで、ノードは実行されない。
-#[derive(Debug, Default, PartialEq)]
 pub struct UserNode {
     inputs: Vec<Rc<Edge>>,
     outputs: Vec<Rc<Edge>>,
+    func: Box<AsyncFn>,
 }
 impl UserNode {
     /// ノードの生成
-    pub fn new(inputs: Vec<Rc<Edge>>) -> Self {
+    pub fn new(inputs: Vec<Rc<Edge>>, func: Box<AsyncFn>) -> Self {
         UserNode {
             inputs,
             outputs: Vec::new(),
+            func,
+        }
+    }
+
+    /// テスト用のノードの生成
+    pub fn new_test(inputs: Vec<Rc<Edge>>) -> Self {
+        UserNode {
+            inputs,
+            outputs: Vec::new(),
+            func: Box::new(|_, _| Box::pin(async {})),
         }
     }
 
@@ -120,6 +137,14 @@ impl UserNode {
     /// 出力エッジの取得
     pub fn outputs(&self) -> &Vec<Rc<Edge>> {
         &self.outputs
+    }
+}
+impl std::fmt::Debug for UserNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserNode")
+            .field("inputs", &self.inputs)
+            .field("outputs", &self.outputs)
+            .finish()
     }
 }
 
@@ -157,12 +182,19 @@ mod tests {
 
     #[test]
     fn test_connect_nodes() {
-        let mut node1 = UserNode::default();
+        let mut node1 = UserNode::new_test(vec![]);
         let edge = node1.add_output::<i32>();
         assert_eq!(node1.outputs.len(), 1);
-        let node2 = UserNode::new(vec![edge.clone()]);
+        let node2 = UserNode::new_test(vec![edge.clone()]);
         assert_eq!(node2.inputs.len(), 1);
         assert_eq!(edge.ty, TypeId::of::<i32>());
         assert_eq!(edge, node2.inputs[0]);
+    }
+
+    #[tokio::test]
+    async fn test_node_run() {
+        let node = Node::new(NodeType::User(UserNode::new_test(vec![])));
+        let container_map = ContainerMap::default();
+        node.run(&container_map).await;
     }
 }

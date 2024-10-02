@@ -446,7 +446,7 @@ mod tests {
         let edge1 = Rc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), 42).await.unwrap();
 
-        let node = Rc::new(Node::new(NodeType::User(UserNode::new(vec![
+        let node = Rc::new(Node::new(NodeType::User(UserNode::new_test(vec![
             edge0.clone(),
             edge1.clone(),
         ]))));

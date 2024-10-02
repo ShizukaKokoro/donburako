@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder() {
-        let node = Rc::new(Node::User(UserNode::default()));
+        let node = Rc::new(Node::new(NodeType::User(UserNode::new_test(vec![]))));
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_add_node() {
-        let node = Rc::new(Node::new(NodeType::User(UserNode::default())));
+        let node = Rc::new(Node::new(NodeType::User(UserNode::new_test(vec![]))));
         let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -130,9 +130,9 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_multi_node() {
-        let mut node0 = UserNode::default();
+        let mut node0 = UserNode::new_test(vec![]);
         let edge = node0.add_output::<i32>();
-        let node1 = UserNode::new(vec![edge.clone()]);
+        let node1 = UserNode::new_test(vec![edge.clone()]);
         let wf = WorkflowBuilder::default()
             .add_node(Rc::new(Node::new(NodeType::User(node0))))
             .unwrap()
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn test_workflow_start() {
         let edge = Rc::new(Edge::new::<i32>());
-        let node0 = UserNode::new(vec![edge.clone()]);
+        let node0 = UserNode::new_test(vec![edge.clone()]);
         let node0_rc = Rc::new(Node::new(NodeType::User(node0)));
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_workflow_start_invalid_edge() {
-        let mut node0 = UserNode::default();
+        let mut node0 = UserNode::new_test(vec![]);
         let edge = node0.add_output::<i32>();
         let node0_rc = Rc::new(Node::new(NodeType::User(node0)));
         let wf = WorkflowBuilder::default()
@@ -171,9 +171,9 @@ mod tests {
 
     #[test]
     fn test_workflow_done() {
-        let mut node0 = UserNode::default();
+        let mut node0 = UserNode::new_test(vec![]);
         let edge = node0.add_output::<i32>();
-        let node1 = UserNode::new(vec![edge.clone()]);
+        let node1 = UserNode::new_test(vec![edge.clone()]);
         let node0_rc = Rc::new(Node::new(NodeType::User(node0)));
         let node1_rc = Rc::new(Node::new(NodeType::User(node1)));
         let wf = WorkflowBuilder::default()
