@@ -81,6 +81,11 @@ impl Edge {
             id: Uuid::new_v4(),
         }
     }
+
+    /// 型のチェック
+    pub fn check_type<T: 'static + Send + Sync>(&self) -> bool {
+        self.ty == TypeId::of::<T>()
+    }
 }
 
 #[cfg(test)]
