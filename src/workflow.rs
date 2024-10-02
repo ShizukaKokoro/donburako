@@ -3,7 +3,7 @@
 //! ワークフローはノードからなる有向グラフ。
 
 use crate::node::{Edge, Node};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
@@ -95,9 +95,14 @@ impl Workflow {
     /// コンテナがワークフローの実行状態を保持しているため、ここと連携する必要がある。
     pub fn done(&self, node: Rc<Node>) -> Result<Vec<Rc<Node>>, WorkflowError> {
         let mut next_nodes = vec![];
+        let mut nodes_set = HashSet::new();
         for output in node.outputs() {
             if let Some(next_node) = self.output_to_node.get(output) {
+                if nodes_set.contains(next_node) {
+                    continue;
+                }
                 next_nodes.push(next_node.clone());
+                assert!(nodes_set.insert(next_node));
             }
         }
         Ok(next_nodes)
