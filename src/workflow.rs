@@ -39,25 +39,14 @@ impl WorkflowBuilder {
     /// ワークフローの生成
     pub fn build(self) -> Workflow {
         let mut input_to_node = HashMap::new();
-        let mut output_to_node = HashMap::new();
 
         for node in self.nodes.iter() {
             for input in node.inputs() {
                 let _ = input_to_node.insert(input.clone(), node.clone());
             }
         }
-        for node in self.nodes.iter() {
-            for output in node.outputs() {
-                if let Some(node_from) = input_to_node.get(output) {
-                    let _ = output_to_node.insert(output.clone(), node_from.clone());
-                }
-            }
-        }
 
-        Workflow {
-            input_to_node,
-            output_to_node,
-        }
+        Workflow { input_to_node }
     }
 }
 
@@ -65,9 +54,6 @@ impl WorkflowBuilder {
 pub struct Workflow {
     /// Edge を入力に持つ Node へのマップ
     input_to_node: HashMap<Arc<Edge>, Rc<Node>>,
-
-    /// Edge から出力する Node へのマップ
-    output_to_node: HashMap<Arc<Edge>, Rc<Node>>,
 }
 impl Workflow {
     // ワークフローの API は再検討が必要
@@ -97,7 +83,7 @@ impl Workflow {
         let mut next_nodes = vec![];
         let mut nodes_set = HashSet::new();
         for output in node.outputs() {
-            if let Some(next_node) = self.output_to_node.get(output) {
+            if let Some(next_node) = self.input_to_node.get(output) {
                 if nodes_set.contains(next_node) {
                     continue;
                 }
@@ -122,7 +108,6 @@ mod tests {
             .unwrap()
             .build();
         assert_eq!(wf.input_to_node.len(), 0);
-        assert_eq!(wf.output_to_node.len(), 0);
     }
 
     #[test]
@@ -147,7 +132,6 @@ mod tests {
             .unwrap()
             .build();
         assert_eq!(wf.input_to_node.len(), 1);
-        assert_eq!(wf.output_to_node.len(), 1);
     }
 
     #[test]
