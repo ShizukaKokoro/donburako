@@ -20,14 +20,14 @@ impl Node {
     /// 入力エッジの取得
     pub fn inputs(&self) -> &Vec<Rc<Edge>> {
         match self {
-            Node::User(node) => &node.inputs,
+            Node::User(node) => node.inputs(),
         }
     }
 
     /// 出力エッジの取得
     pub fn outputs(&self) -> &Vec<Rc<Edge>> {
         match self {
-            Node::User(node) => &node.outputs,
+            Node::User(node) => node.outputs(),
         }
     }
 }
@@ -57,6 +57,16 @@ impl UserNode {
         let edge = Rc::new(Edge::new::<T>());
         self.outputs.push(edge.clone());
         edge
+    }
+
+    /// 入力エッジの取得
+    pub fn inputs(&self) -> &Vec<Rc<Edge>> {
+        &self.inputs
+    }
+
+    /// 出力エッジの取得
+    pub fn outputs(&self) -> &Vec<Rc<Edge>> {
+        &self.outputs
     }
 }
 
