@@ -145,6 +145,11 @@ impl UserNode {
     pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         &self.outputs
     }
+
+    /// ノードに変換
+    pub fn to_node(self) -> Node {
+        Node::new(NodeType::User(self))
+    }
 }
 impl std::fmt::Debug for UserNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -200,7 +205,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_run() {
-        let node = Node::new(NodeType::User(UserNode::new_test(vec![])));
+        let node = UserNode::new_test(vec![]).to_node();
         let container_map = ContainerMap::default();
         node.run(&container_map).await;
     }

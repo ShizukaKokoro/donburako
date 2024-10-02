@@ -283,7 +283,7 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{Edge, Node, NodeType, UserNode};
+    use crate::node::{Edge, UserNode};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -459,10 +459,7 @@ mod tests {
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), 42).await.unwrap();
 
-        let node = Rc::new(Node::new(NodeType::User(UserNode::new_test(vec![
-            edge0.clone(),
-            edge1.clone(),
-        ]))));
+        let node = Rc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node());
         assert!(!map.check_node_executable(&node).await);
 
         map.add_new_container(edge1.clone(), "42").await.unwrap();
