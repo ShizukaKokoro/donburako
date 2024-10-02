@@ -10,7 +10,7 @@ use crate::container::ContainerMap;
 use std::any::TypeId;
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// ノードID
@@ -57,14 +57,14 @@ impl Node {
     }
 
     /// 入力エッジの取得
-    pub fn inputs(&self) -> &Vec<Rc<Edge>> {
+    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.inputs(),
         }
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> &Vec<Rc<Edge>> {
+    pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.outputs(),
         }
@@ -99,13 +99,13 @@ type AsyncFn = dyn for<'a> Fn(&'a UserNode, &'a ContainerMap) -> BoxedFuture<'a>
 /// また、その関数が返す値の数だけ出力エッジが必要になる。
 /// 全ての入力エッジにデータが来るまで、ノードは実行されない。
 pub struct UserNode {
-    inputs: Vec<Rc<Edge>>,
-    outputs: Vec<Rc<Edge>>,
+    inputs: Vec<Arc<Edge>>,
+    outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
 }
 impl UserNode {
     /// ノードの生成
-    pub fn new(inputs: Vec<Rc<Edge>>, func: Box<AsyncFn>) -> Self {
+    pub fn new(inputs: Vec<Arc<Edge>>, func: Box<AsyncFn>) -> Self {
         UserNode {
             inputs,
             outputs: Vec::new(),
@@ -114,7 +114,7 @@ impl UserNode {
     }
 
     /// テスト用のノードの生成
-    pub fn new_test(inputs: Vec<Rc<Edge>>) -> Self {
+    pub fn new_test(inputs: Vec<Arc<Edge>>) -> Self {
         UserNode {
             inputs,
             outputs: Vec::new(),
@@ -123,19 +123,19 @@ impl UserNode {
     }
 
     /// 出力エッジの追加
-    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Rc<Edge> {
-        let edge = Rc::new(Edge::new::<T>());
+    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Arc<Edge> {
+        let edge = Arc::new(Edge::new::<T>());
         self.outputs.push(edge.clone());
         edge
     }
 
     /// 入力エッジの取得
-    pub fn inputs(&self) -> &Vec<Rc<Edge>> {
+    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         &self.inputs
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> &Vec<Rc<Edge>> {
+    pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         &self.outputs
     }
 }

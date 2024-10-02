@@ -3,7 +3,9 @@
 //! ワークフローはノードからなる有向グラフ。
 
 use crate::node::{Edge, Node};
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// ワークフローエラー
@@ -62,10 +64,10 @@ impl WorkflowBuilder {
 /// ワークフロー
 pub struct Workflow {
     /// Edge を入力に持つ Node へのマップ
-    input_to_node: HashMap<Rc<Edge>, Rc<Node>>,
+    input_to_node: HashMap<Arc<Edge>, Rc<Node>>,
 
     /// Edge から出力する Node へのマップ
-    output_to_node: HashMap<Rc<Edge>, Rc<Node>>,
+    output_to_node: HashMap<Arc<Edge>, Rc<Node>>,
 }
 impl Workflow {
     // ワークフローの API は再検討が必要
@@ -77,7 +79,7 @@ impl Workflow {
     /// TODO: ワークフローの開始の API を再検討する
     /// 現状 Edge を引数に取るが、最初にデータを入れるべき Edge を保持していない。
     /// 他のワークフローから呼び出すために、コンテナを直接流し込める形である必要がある。
-    pub fn start(&self, edge: Rc<Edge>) -> Result<Rc<Node>, WorkflowError> {
+    pub fn start(&self, edge: Arc<Edge>) -> Result<Rc<Node>, WorkflowError> {
         if let Some(node) = self.input_to_node.get(&edge) {
             Ok(node.clone())
         } else {
@@ -145,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_workflow_start() {
-        let edge = Rc::new(Edge::new::<i32>());
+        let edge = Arc::new(Edge::new::<i32>());
         let node0 = UserNode::new_test(vec![edge.clone()]);
         let node0_rc = Rc::new(Node::new(NodeType::User(node0)));
         let wf = WorkflowBuilder::default()

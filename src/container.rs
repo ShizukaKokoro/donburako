@@ -180,7 +180,7 @@ impl Drop for Container {
 #[derive(Default, Debug, Clone)]
 pub struct ContainerMap {
     // TODO: コンテナの ID を参照して、コンテナを貯められるようにする
-    map: Arc<Mutex<HashMap<Rc<Edge>, Container>>>,
+    map: Arc<Mutex<HashMap<Arc<Edge>, Container>>>,
     // counter: AtomicUsize,
 }
 impl ContainerMap {
@@ -194,7 +194,7 @@ impl ContainerMap {
     /// * `data` - データ
     pub async fn add_new_container<T: 'static + Send + Sync>(
         &self,
-        edge: Rc<Edge>,
+        edge: Arc<Edge>,
         data: T,
     ) -> Result<(), ContainerError> {
         if !edge.check_type::<T>() {
@@ -215,7 +215,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 存在する場合は true、そうでない場合は false
-    async fn check_edge_exists(&self, edge: &Rc<Edge>) -> bool {
+    async fn check_edge_exists(&self, edge: &Arc<Edge>) -> bool {
         self.map.lock().await.contains_key(edge)
     }
 
@@ -254,7 +254,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// コンテナ
-    pub async fn get_container(&self, edge: &Rc<Edge>) -> Option<Container> {
+    pub async fn get_container(&self, edge: &Arc<Edge>) -> Option<Container> {
         self.map.lock().await.remove(edge)
     }
 
@@ -268,7 +268,7 @@ impl ContainerMap {
     /// * `container` - コンテナ
     pub async fn add_container(
         &self,
-        edge: Rc<Edge>,
+        edge: Arc<Edge>,
         container: Container,
     ) -> Result<(), ContainerError> {
         if !container.has_data() {
@@ -422,7 +422,7 @@ mod tests {
     #[tokio::test]
     async fn test_container_map_add_new_container() {
         let map = ContainerMap::default();
-        let edge = Rc::new(Edge::new::<i32>());
+        let edge = Arc::new(Edge::new::<i32>());
         let result = map.add_new_container(edge.clone(), 42).await;
         assert!(result.is_ok());
     }
@@ -430,20 +430,20 @@ mod tests {
     #[tokio::test]
     async fn test_container_map_check_edge_exists() {
         let map = ContainerMap::default();
-        let edge = Rc::new(Edge::new::<i32>());
+        let edge = Arc::new(Edge::new::<i32>());
         map.add_new_container(edge.clone(), 42).await.unwrap();
 
         assert!(map.check_edge_exists(&edge).await);
 
-        let edge = Rc::new(Edge::new::<&str>());
+        let edge = Arc::new(Edge::new::<&str>());
         assert!(!map.check_edge_exists(&edge).await);
     }
 
     #[tokio::test]
     async fn test_container_map_check_node_executable_user() {
         let map = ContainerMap::default();
-        let edge0 = Rc::new(Edge::new::<i32>());
-        let edge1 = Rc::new(Edge::new::<&str>());
+        let edge0 = Arc::new(Edge::new::<i32>());
+        let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), 42).await.unwrap();
 
         let node = Rc::new(Node::new(NodeType::User(UserNode::new_test(vec![
@@ -459,7 +459,7 @@ mod tests {
     #[tokio::test]
     async fn test_container_map_get_container() {
         let map = ContainerMap::default();
-        let edge = Rc::new(Edge::new::<i32>());
+        let edge = Arc::new(Edge::new::<i32>());
         map.add_new_container(edge.clone(), 42).await.unwrap();
 
         let container = map.get_container(&edge).await;
@@ -472,7 +472,7 @@ mod tests {
     #[tokio::test]
     async fn test_container_map_add_container() {
         let map = ContainerMap::default();
-        let edge = Rc::new(Edge::new::<i32>());
+        let edge = Arc::new(Edge::new::<i32>());
         let mut container = Container::default();
         container.store(42);
         map.add_container(edge.clone(), container).await.unwrap();
