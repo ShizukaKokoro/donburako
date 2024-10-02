@@ -67,6 +67,7 @@ impl ProcessorBuilder {
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
+            // NOTE: ハンドル内で外側から情報を流し込み、端まで到達したコンテナのデータを取り出す仕組みがない。
             loop {
                 if cancel_clone.is_cancelled() {
                     break;

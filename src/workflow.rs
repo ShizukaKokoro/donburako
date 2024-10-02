@@ -68,9 +68,15 @@ pub struct Workflow {
     output_to_node: HashMap<Rc<Edge>, Rc<Node>>,
 }
 impl Workflow {
+    // ワークフローの API は再検討が必要
+    // コンテナのワークフローの実行状況を参照する必要がある。
+    // ただのデータの保管場所として、プロセッサーが利用するようにするべきかもしれない。 -> 関連関数の削除
+
     /// ワークフローの開始
     ///
-    /// 何度も
+    /// TODO: ワークフローの開始の API を再検討する
+    /// 現状 Edge を引数に取るが、最初にデータを入れるべき Edge を保持していない。
+    /// 他のワークフローから呼び出すために、コンテナを直接流し込める形である必要がある。
     pub fn start(&self, edge: Rc<Edge>) -> Result<Rc<Node>, WorkflowError> {
         if let Some(node) = self.input_to_node.get(&edge) {
             Ok(node.clone())
@@ -80,6 +86,11 @@ impl Workflow {
     }
 
     /// ノードの完了と次のノードの取得
+    ///
+    /// 終了したノードから次のノードを取得する。
+    /// TODO: 全ての入力が揃った時に次のノードを取得するようにする
+    /// 現状は、単に出力に接続されたノードを取得している。
+    /// コンテナがワークフローの実行状態を保持しているため、ここと連携する必要がある。
     pub fn done(&self, node: Rc<Node>) -> Result<Vec<Rc<Node>>, WorkflowError> {
         let mut next_nodes = vec![];
         for output in node.outputs() {
