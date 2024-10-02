@@ -3,7 +3,7 @@
 //! ワークフローはノードからなる有向グラフ。
 
 use crate::node::{Edge, Node};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
@@ -83,27 +83,6 @@ impl Workflow {
     pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Rc<Node>> {
         self.input_to_node.get(edge).cloned()
     }
-
-    /// ノードの完了と次のノードの取得
-    ///
-    /// 終了したノードから次のノードを取得する。
-    /// TODO: 全ての入力が揃った時に次のノードを取得するようにする
-    /// 現状は、単に出力に接続されたノードを取得している。
-    /// コンテナがワークフローの実行状態を保持しているため、ここと連携する必要がある。
-    pub fn done(&self, node: Rc<Node>) -> Result<Vec<Rc<Node>>, WorkflowError> {
-        let mut next_nodes = vec![];
-        let mut nodes_set = HashSet::new();
-        for output in node.outputs() {
-            if let Some(next_node) = self.input_to_node.get(output) {
-                if nodes_set.contains(next_node) {
-                    continue;
-                }
-                next_nodes.push(next_node.clone());
-                assert!(nodes_set.insert(next_node));
-            }
-        }
-        Ok(next_nodes)
-    }
 }
 
 #[cfg(test)]
@@ -182,22 +161,5 @@ mod tests {
             .build();
         let node = wf.get_node(&edge).unwrap();
         assert_eq!(node, node0_rc);
-    }
-
-    #[test]
-    fn test_workflow_done() {
-        let mut node0 = UserNode::new_test(vec![]);
-        let edge = node0.add_output::<i32>();
-        let node1 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Rc::new(node0.to_node());
-        let node1_rc = Rc::new(node1.to_node());
-        let wf = WorkflowBuilder::default()
-            .add_node(node0_rc.clone())
-            .unwrap()
-            .add_node(node1_rc.clone())
-            .unwrap()
-            .build();
-        let next_nodes = wf.done(node0_rc).unwrap();
-        assert_eq!(next_nodes, vec![node1_rc]);
     }
 }

@@ -8,8 +8,9 @@
 // TODO: 同じワークフロー内の異なるイテレーションで競合しないように、イテレーション番号を紐づける(0 から始まる usize)
 
 use crate::node::{Edge, Node, NodeType};
+use crate::workflow::Workflow;
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
@@ -246,6 +247,36 @@ impl ContainerMap {
         }
     }
 
+    /// 実行が可能なノードを取得する
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - 終了したノード
+    /// * `wf` - ワークフロー
+    ///
+    /// # Returns
+    ///
+    /// 実行可能なノードの Vec
+    pub async fn get_executable_nodes(&self, node: &Rc<Node>, wf: &Workflow) -> Vec<Rc<Node>> {
+        let mut nodes = Vec::new();
+        let mut node_set = HashSet::new();
+        match node.kind() {
+            NodeType::User(node) => {
+                for edge in node.outputs() {
+                    if let Some(next_node) = wf.get_node(edge) {
+                        if self.check_node_executable(&next_node).await
+                            && !node_set.contains(&next_node)
+                        {
+                            nodes.push(next_node.clone());
+                            assert!(node_set.insert(next_node));
+                        }
+                    }
+                }
+            }
+        }
+        nodes
+    }
+
     /// コンテナの取得
     ///
     /// # Arguments
@@ -283,7 +314,10 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{Edge, UserNode};
+    use crate::{
+        node::{Edge, UserNode},
+        workflow::WorkflowBuilder,
+    };
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -464,6 +498,46 @@ mod tests {
 
         map.add_new_container(edge1.clone(), "42").await.unwrap();
         assert!(map.check_node_executable(&node).await);
+    }
+
+    #[tokio::test]
+    async fn test_container_map_get_executable_nodes() {
+        let cmap = ContainerMap::default();
+        let edge0 = Arc::new(Edge::new::<i32>());
+        let edge1 = Arc::new(Edge::new::<&str>());
+        cmap.add_new_container(edge0.clone(), 42).await.unwrap();
+        cmap.add_new_container(edge1.clone(), "42").await.unwrap();
+
+        let mut node0 = UserNode::new_test(vec![edge0.clone()]);
+        let edge2 = node0.add_output::<i32>();
+        let node0_rc = Rc::new(node0.to_node());
+        let mut node1 = UserNode::new_test(vec![edge1.clone()]);
+        let edge3 = node1.add_output::<&str>();
+        let node1_rc = Rc::new(node1.to_node());
+        let node2 = UserNode::new_test(vec![edge2.clone(), edge3.clone()]);
+        let node2_rc = Rc::new(node2.to_node());
+        let wf = WorkflowBuilder::default()
+            .add_node(node0_rc.clone())
+            .unwrap()
+            .add_node(node1_rc.clone())
+            .unwrap()
+            .add_node(node2_rc.clone())
+            .unwrap()
+            .build();
+
+        // node0 は実行可能
+        assert!(cmap.check_node_executable(&node0_rc).await);
+        // node0 はまだ実行されていない
+        let nodes = cmap.get_executable_nodes(&node0_rc, &wf).await;
+        assert_eq!(nodes, vec![]);
+        // node0 を実行
+        cmap.add_new_container(edge2, 42).await.unwrap();
+        let nodes = cmap.get_executable_nodes(&node0_rc, &wf).await;
+        assert_eq!(nodes, vec![]);
+        // node1 を実行
+        cmap.add_new_container(edge3, "42").await.unwrap();
+        let nodes = cmap.get_executable_nodes(&node1_rc, &wf).await;
+        assert_eq!(nodes, vec![node2_rc.clone()]);
     }
 
     #[tokio::test]
