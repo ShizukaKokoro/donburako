@@ -80,9 +80,9 @@ impl ProcessorBuilder {
     pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
         debug!("Start building processor");
         let workflow = {
-            let mut workflow: Vec<Workflow> = Vec::new();
+            let mut workflow = Vec::new();
             for builder in self.workflow {
-                workflow.push(builder.build());
+                workflow.push(Rc::new(builder.build()));
             }
             workflow
         };
