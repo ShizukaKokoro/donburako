@@ -7,8 +7,13 @@
 // TODO: コンテナが、他のワークフローの実行中のコンテナと競合しないように ID を紐づける
 // TODO: 同じワークフロー内の異なるイテレーションで競合しないように、イテレーション番号を紐づける(0 から始まる usize)
 
+use crate::node::{Edge, Node};
 use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 /// コンテナエラー
@@ -165,9 +170,119 @@ impl Drop for Container {
     }
 }
 
+/// コンテナマップ
+///
+/// コンテナを管理するためのマップ。
+/// 次に向かうべきエッジをキーにして、コンテナを格納する。
+/// 外部からはエッジを参照して、コンテナを取り出すことができる。
+///
+/// 内部に状態をもつため、実行順に影響を受ける。
+#[derive(Default, Debug)]
+pub struct ContainerMap {
+    // TODO: コンテナの ID を参照して、コンテナを貯められるようにする
+    map: Arc<Mutex<HashMap<Rc<Edge>, Container>>>,
+    // counter: AtomicUsize,
+}
+impl ContainerMap {
+    /// 新しいコンテナの追加
+    ///
+    /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `data` - データ
+    pub async fn add_new_container<T: 'static + Send + Sync>(
+        &self,
+        edge: Rc<Edge>,
+        data: T,
+    ) -> Result<(), ContainerError> {
+        if !edge.check_type::<T>() {
+            return Err(ContainerError::TypeMismatch);
+        }
+        let mut container = Container::default();
+        container.store(data);
+        let _ = self.map.lock().await.insert(edge, container);
+        Ok(())
+    }
+
+    /// エッジに対応するコンテナが存在するか確認する
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    ///
+    /// # Returns
+    ///
+    /// 存在する場合は true、そうでない場合は false
+    async fn check_edge_exists(&self, edge: &Rc<Edge>) -> bool {
+        self.map.lock().await.contains_key(edge)
+    }
+
+    /// ノードが実行できるか確認する
+    ///
+    /// ノードは全ての入力エッジに対して、コンテナが格納されることで実行可能となる。
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - ノード
+    ///
+    /// # Returns
+    ///
+    /// 実行可能な場合は true、そうでない場合は false
+    pub async fn check_node_executable(&self, node: &Rc<Node>) -> bool {
+        match node.as_ref() {
+            Node::User(node) => {
+                let mut result = true;
+                for edge in node.inputs() {
+                    if !self.check_edge_exists(edge).await {
+                        result = false;
+                        break;
+                    }
+                }
+                result
+            }
+        }
+    }
+
+    /// コンテナの取得
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    ///
+    /// # Returns
+    ///
+    /// コンテナ
+    pub async fn get_container(&self, edge: &Rc<Edge>) -> Option<Container> {
+        self.map.lock().await.remove(edge)
+    }
+
+    /// 既存のコンテナの追加
+    ///
+    /// エッジの移動時に、既存のコンテナを追加する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `container` - コンテナ
+    pub async fn add_container(
+        &self,
+        edge: Rc<Edge>,
+        container: Container,
+    ) -> Result<(), ContainerError> {
+        if !container.has_data() {
+            return Err(ContainerError::DataNotFound);
+        }
+        let _ = self.map.lock().await.insert(edge, container);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node::{Edge, Node, UserNode};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -302,5 +417,70 @@ mod tests {
         assert_eq!(con0.stack.0.len(), 0);
         assert_eq!(con1.stack.0.len(), 1);
         assert!(con1.check_cancel());
+    }
+
+    #[tokio::test]
+    async fn test_container_map_add_new_container() {
+        let map = ContainerMap::default();
+        let edge = Rc::new(Edge::new::<i32>());
+        let result = map.add_new_container(edge.clone(), 42).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_container_map_check_edge_exists() {
+        let map = ContainerMap::default();
+        let edge = Rc::new(Edge::new::<i32>());
+        map.add_new_container(edge.clone(), 42).await.unwrap();
+
+        assert!(map.check_edge_exists(&edge).await);
+
+        let edge = Rc::new(Edge::new::<&str>());
+        assert!(!map.check_edge_exists(&edge).await);
+    }
+
+    #[tokio::test]
+    async fn test_container_map_check_node_executable_user() {
+        let map = ContainerMap::default();
+        let edge0 = Rc::new(Edge::new::<i32>());
+        let edge1 = Rc::new(Edge::new::<&str>());
+        map.add_new_container(edge0.clone(), 42).await.unwrap();
+
+        let node = Rc::new(Node::User(UserNode::new(vec![
+            edge0.clone(),
+            edge1.clone(),
+        ])));
+        assert!(!map.check_node_executable(&node).await);
+
+        map.add_new_container(edge1.clone(), "42").await.unwrap();
+        assert!(map.check_node_executable(&node).await);
+    }
+
+    #[tokio::test]
+    async fn test_container_map_get_container() {
+        let map = ContainerMap::default();
+        let edge = Rc::new(Edge::new::<i32>());
+        map.add_new_container(edge.clone(), 42).await.unwrap();
+
+        let container = map.get_container(&edge).await;
+        assert!(container.is_some());
+        let mut container = container.unwrap();
+        let data = container.take::<i32>().unwrap();
+        assert_eq!(data, 42);
+    }
+
+    #[tokio::test]
+    async fn test_container_map_add_container() {
+        let map = ContainerMap::default();
+        let edge = Rc::new(Edge::new::<i32>());
+        let mut container = Container::default();
+        container.store(42);
+        map.add_container(edge.clone(), container).await.unwrap();
+
+        let container = map.get_container(&edge).await;
+        assert!(container.is_some());
+        let mut container = container.unwrap();
+        let data = container.take::<i32>().unwrap();
+        assert_eq!(data, 42);
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
-use crate::container::Container;
+use crate::container::{Container, ContainerMap};
 use crate::node::Edge;
 use crate::workflow::{Workflow, WorkflowBuilder};
 use log::{debug, info};
@@ -87,7 +87,7 @@ impl ProcessorBuilder {
             workflow
         };
         let mut handlers: Handlers<()> = Handlers::new(n);
-        let mut cons: HashMap<Rc<Edge>, Container> = HashMap::new();
+        let cons = ContainerMap::default();
         debug!("End setting up processor: capacity={}", n);
 
         let (tx, mut rx): (mpsc::Sender<usize>, mpsc::Receiver<usize>) = mpsc::channel(16);
