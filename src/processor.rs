@@ -62,10 +62,15 @@ impl<T> Handlers<T> {
 }
 
 /// 実行ID
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+///
+/// TODO: 後で Default トレイトを削除する。
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Default)]
 pub struct ExecutorId(Uuid);
 impl ExecutorId {
-    fn new() -> Self {
+    /// 実行IDの生成
+    ///
+    /// TODO: 後でこの関数は隠蔽される。
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }
