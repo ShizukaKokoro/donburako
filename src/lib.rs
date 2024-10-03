@@ -87,7 +87,6 @@ pub mod node;
 pub mod processor;
 pub mod workflow;
 
-// TODO: コンテナマップがエッジと実行IDをキーにするように変更
 // TODO: 単一ワークフローの実行を実装
 // TODO: 異なるワークフローの同時実行のテスト
 // TODO: 同一ワークフローの同時実行を実装
