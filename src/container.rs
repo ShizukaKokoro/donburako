@@ -4,9 +4,6 @@
 //! 中に入っているデータの型は、決まっておらず、任意の型を格納し、任意の型を取り出すことができる。
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
-// TODO: コンテナが、他のワークフローの実行中のコンテナと競合しないように ID を紐づける
-// TODO: 同じワークフロー内の異なるイテレーションで競合しないように、イテレーション番号を紐づける(0 から始まる usize)
-
 use crate::node::{Edge, Node, NodeType};
 use crate::workflow::Workflow;
 use std::any::{Any, TypeId};
@@ -180,7 +177,8 @@ impl Drop for Container {
 /// 内部に状態をもつため、実行順に影響を受ける。
 #[derive(Default, Debug, Clone)]
 pub struct ContainerMap {
-    // TODO: コンテナの ID を参照して、コンテナを貯められるようにする
+    // TODO: 実行IDに対応する
+    // TODO: イテレーション番号に対応する
     map: Arc<Mutex<HashMap<Arc<Edge>, Container>>>,
     // counter: AtomicUsize,
 }
