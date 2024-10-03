@@ -74,6 +74,13 @@ impl Node {
     pub fn kind(&self) -> &NodeType {
         &self.kind
     }
+
+    /// ブロッキングノードかどうか
+    pub fn is_blocking(&self) -> bool {
+        match &self.kind {
+            NodeType::User(node) => node.is_blocking(),
+        }
+    }
 }
 impl std::cmp::PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
