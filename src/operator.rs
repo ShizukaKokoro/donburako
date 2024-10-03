@@ -51,9 +51,12 @@ impl ExecutableQueue {
 
     /// ノードの取得
     pub fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
-        let item = self.queue.pop_front();
-        assert!(self.set.remove(&item.clone().unwrap()));
-        item
+        if let Some(item) = self.queue.pop_front() {
+            assert!(self.set.remove(&item));
+            Some(item)
+        } else {
+            None
+        }
     }
 }
 
