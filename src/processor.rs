@@ -150,16 +150,16 @@ impl ProcessorBuilder {
                     let handle = if let Some((node, exec_id)) = op.get_next_node().await {
                         let op_clone = op.clone();
                         if node.is_blocking() {
-                            spawn(async move {
-                                node.run(&op_clone, exec_id).await;
-                                Ok(())
-                            })
-                        } else {
                             let rt_handle = Handle::current();
                             spawn_blocking(move || {
                                 rt_handle.block_on(async {
                                     node.run(&op_clone, exec_id).await;
                                 });
+                                Ok(())
+                            })
+                        } else {
+                            spawn(async move {
+                                node.run(&op_clone, exec_id).await;
                                 Ok(())
                             })
                         }
