@@ -73,6 +73,10 @@ pub struct Operator {
 }
 impl Operator {
     /// 新しいオペレーターの生成
+    ///
+    /// # Arguments
+    ///
+    /// * `builders` - ワークフロービルダーのリスト
     pub fn new(builders: Vec<WorkflowBuilder>) -> Self {
         let workflows = builders
             .into_iter()
@@ -92,6 +96,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
     /// * `data` - データ
     pub async fn add_new_container<T: 'static + Send + Sync>(
         &self,
@@ -113,6 +118,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `node` - ノード
+    /// * `exec_id` - 実行ID
     ///
     /// # Returns
     ///
@@ -129,6 +135,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `node` - 終了したノード
+    /// * `exec_id` - 実行ID
     /// * `wf` - ワークフロー
     ///
     /// # Returns
@@ -152,6 +159,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
     ///
     /// # Returns
     ///
@@ -167,6 +175,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
     /// * `container` - コンテナ
     pub async fn add_container(
         &self,
