@@ -88,7 +88,6 @@ pub mod operator;
 pub mod processor;
 pub mod workflow;
 
-// TODO: 単一ワークフローの実行を実装
 // TODO: 異なるワークフローの同時実行のテスト
 // TODO: 同一ワークフローの同時実行を実装
 // TODO: コンテナマップの保存と読み込みを実装(実行の中断と再開、実行途中のノードに入っているデータも保存する必要がある)
