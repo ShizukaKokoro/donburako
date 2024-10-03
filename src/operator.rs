@@ -3,9 +3,19 @@
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::node::{Edge, Node};
 use crate::workflow::Workflow;
+use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+
+/// オペレーターエラー
+#[derive(Debug, Error, PartialEq)]
+pub enum OperatorError {
+    /// コンテナエラー
+    #[error("Container error")]
+    ContainerError(#[from] ContainerError),
+}
 
 /// 実行ID
 ///
@@ -21,12 +31,22 @@ impl ExecutorId {
     }
 }
 
+/// 状態
+#[derive(Debug, PartialEq, Eq)]
+pub enum State {
+    /// 実行中
+    Running(usize),
+    /// 終了
+    Finished(usize),
+}
+
 /// オペレーター
 ///
 /// コンテナと実行IDごとのワークフローの状態を管理する。
 #[derive(Debug, Default, Clone)]
 pub struct Operator {
     containers: Arc<Mutex<ContainerMap>>,
+    executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
 }
 impl Operator {
     /// 新しいコンテナの追加
@@ -42,11 +62,12 @@ impl Operator {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
         data: T,
-    ) -> Result<(), ContainerError> {
-        self.containers
+    ) -> Result<(), OperatorError> {
+        Ok(self
+            .containers
             .lock()
             .await
-            .add_new_container(edge, exec_id, data)
+            .add_new_container(edge, exec_id, data)?)
     }
 
     /// ノードが実行できるか確認する
@@ -115,10 +136,39 @@ impl Operator {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
         container: Container,
-    ) -> Result<(), ContainerError> {
-        self.containers
+    ) -> Result<(), OperatorError> {
+        Ok(self
+            .containers
             .lock()
             .await
-            .add_container(edge, exec_id, container)
+            .add_container(edge, exec_id, container)?)
+    }
+
+    /// ワークフローの実行開始
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    /// * `index` - ワークフローのインデックス
+    pub async fn start_workflow(&self, exec_id: ExecutorId, index: usize) {
+        let _ = self
+            .executors
+            .lock()
+            .await
+            .insert(exec_id, State::Running(index));
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_operator_start_workflow() {
+        let op = Operator::default();
+        let exec_id = ExecutorId::new();
+        op.start_workflow(exec_id, 0).await;
+        let executors = op.executors.lock().await;
+        assert_eq!(executors.get(&exec_id), Some(&State::Running(0)));
     }
 }

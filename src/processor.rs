@@ -104,7 +104,6 @@ impl ProcessorBuilder {
         let mut handlers: Handlers<()> = Handlers::new(n);
         let op = Operator::default();
         let op_clone = op.clone();
-        let mut exec_map: HashMap<ExecutorId, usize> = HashMap::new();
         debug!("End setting up processor: capacity={}", n);
 
         let (tx, mut rx): (mpsc::Sender<StartMessage>, mpsc::Receiver<StartMessage>) =
@@ -122,8 +121,7 @@ impl ProcessorBuilder {
                         "Start workflow: {:?} with id: {:?}",
                         message.index, message.exec_id
                     );
-                    let exec_id = message.exec_id;
-                    let _ = exec_map.insert(exec_id, message.index);
+                    op.start_workflow(message.exec_id, message.index).await;
                 }
 
                 debug!("Get nodes enabled to run");
