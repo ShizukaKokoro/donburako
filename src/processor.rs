@@ -55,6 +55,10 @@ impl<T> Handlers<T> {
         self.retains.push_back(key);
         self.handles[key] = None;
     }
+
+    fn is_full(&self) -> bool {
+        self.retains.is_empty()
+    }
 }
 
 /// 開始メッセージ
