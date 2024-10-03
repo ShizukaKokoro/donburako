@@ -3,7 +3,7 @@
 //! ワークフローはノードからなる有向グラフ。
 
 use crate::node::{Edge, Node};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -38,14 +38,33 @@ impl WorkflowBuilder {
     /// ワークフローの生成
     pub fn build(self) -> Workflow {
         let mut input_to_node = HashMap::new();
+        // すべてのエッジ
+        let mut all_edges = HashSet::new();
+        // ノードの入力に接続されているエッジ
+        let mut input_edges = HashSet::new();
+        // ノードの出力に接続されているエッジ
+        let mut output_edges = HashSet::new();
 
         for node in self.nodes.iter() {
             for input in node.inputs() {
                 let _ = input_to_node.insert(input.clone(), node.clone());
+                let _ = all_edges.insert(input.clone());
+                let _ = input_edges.insert(input.clone());
+            }
+            for output in node.outputs() {
+                let _ = all_edges.insert(output.clone());
+                let _ = output_edges.insert(output.clone());
             }
         }
 
-        Workflow { input_to_node }
+        let start_edges = all_edges.difference(&output_edges).cloned().collect();
+        let end_edges = all_edges.difference(&input_edges).cloned().collect();
+
+        Workflow {
+            input_to_node,
+            start_edges,
+            end_edges,
+        }
     }
 }
 
@@ -54,6 +73,10 @@ impl WorkflowBuilder {
 pub struct Workflow {
     /// Edge を入力に持つ Node へのマップ
     input_to_node: HashMap<Arc<Edge>, Arc<Node>>,
+    // 始端となるエッジ
+    start_edges: Vec<Arc<Edge>>,
+    // 終端となるエッジ
+    end_edges: Vec<Arc<Edge>>,
 }
 impl Workflow {
     // ワークフローの API は再検討が必要
@@ -83,12 +106,23 @@ impl Workflow {
     pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Arc<Node>> {
         self.input_to_node.get(edge).cloned()
     }
+
+    /// ワークフローの始端エッジを取得
+    pub fn start_edges(&self) -> &Vec<Arc<Edge>> {
+        &self.start_edges
+    }
+
+    /// ワークフローの終端エッジを取得
+    pub fn end_edges(&self) -> &Vec<Arc<Edge>> {
+        &self.end_edges
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::node::UserNode;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_workflow_builder() {
@@ -161,5 +195,49 @@ mod tests {
             .build();
         let node = wf.get_node(&edge).unwrap();
         assert_eq!(node, node0_rc);
+    }
+
+    #[test]
+    fn test_workflow_start_edges() {
+        let edge0 = Arc::new(Edge::new::<i32>());
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let node0 = UserNode::new_test(vec![edge0.clone()]);
+        let node1 = UserNode::new_test(vec![edge1.clone()]);
+        let wf = WorkflowBuilder::default()
+            .add_node(Arc::new(node0.to_node()))
+            .unwrap()
+            .add_node(Arc::new(node1.to_node()))
+            .unwrap()
+            .build();
+        let mut result = HashSet::new();
+        for edge in wf.start_edges() {
+            let _ = result.insert(edge.clone());
+        }
+        let mut expected = HashSet::new();
+        let _ = expected.insert(edge0);
+        let _ = expected.insert(edge1);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_workflow_end_edges() {
+        let mut node0 = UserNode::new_test(vec![]);
+        let edge0 = node0.add_output::<i32>();
+        let mut node1 = UserNode::new_test(vec![]);
+        let edge1 = node1.add_output::<i32>();
+        let wf = WorkflowBuilder::default()
+            .add_node(Arc::new(node0.to_node()))
+            .unwrap()
+            .add_node(Arc::new(node1.to_node()))
+            .unwrap()
+            .build();
+        let mut result = HashSet::new();
+        for edge in wf.end_edges() {
+            let _ = result.insert(edge.clone());
+        }
+        let mut expected = HashSet::new();
+        let _ = expected.insert(edge0);
+        let _ = expected.insert(edge1);
+        assert_eq!(result, expected);
     }
 }
