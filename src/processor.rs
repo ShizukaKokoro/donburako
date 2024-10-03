@@ -170,6 +170,23 @@ impl Processor {
         id
     }
 
+    /// データを設定
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    /// * `data` - データ
+    pub async fn store<T: 'static + Send + Sync>(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+        data: T,
+    ) -> Result<(), ProcessorError> {
+        self.op.add_new_container(edge, exec_id, data).await?;
+        Ok(())
+    }
+
     /// プロセッサーの停止
     pub fn stop(&self) {
         info!("Stop processor");
