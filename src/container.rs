@@ -11,7 +11,6 @@ use crate::node::{Edge, Node, NodeType};
 use crate::workflow::Workflow;
 use std::any::{Any, TypeId};
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -232,7 +231,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 実行可能な場合は true、そうでない場合は false
-    pub async fn check_node_executable(&self, node: &Rc<Node>) -> bool {
+    pub async fn check_node_executable(&self, node: &Arc<Node>) -> bool {
         match node.kind() {
             NodeType::User(node) => {
                 let mut result = true;
@@ -257,7 +256,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 実行可能なノードの Vec
-    pub async fn get_executable_nodes(&self, node: &Rc<Node>, wf: &Workflow) -> Vec<Rc<Node>> {
+    pub async fn get_executable_nodes(&self, node: &Arc<Node>, wf: &Workflow) -> Vec<Arc<Node>> {
         let mut nodes = Vec::new();
         let mut node_set = HashSet::new();
         match node.kind() {
@@ -493,7 +492,7 @@ mod tests {
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), 42).await.unwrap();
 
-        let node = Rc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node());
         assert!(!map.check_node_executable(&node).await);
 
         map.add_new_container(edge1.clone(), "42").await.unwrap();
@@ -510,12 +509,12 @@ mod tests {
 
         let mut node0 = UserNode::new_test(vec![edge0.clone()]);
         let edge2 = node0.add_output::<i32>();
-        let node0_rc = Rc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node());
         let mut node1 = UserNode::new_test(vec![edge1.clone()]);
         let edge3 = node1.add_output::<&str>();
-        let node1_rc = Rc::new(node1.to_node());
+        let node1_rc = Arc::new(node1.to_node());
         let node2 = UserNode::new_test(vec![edge2.clone(), edge3.clone()]);
-        let node2_rc = Rc::new(node2.to_node());
+        let node2_rc = Arc::new(node2.to_node());
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()

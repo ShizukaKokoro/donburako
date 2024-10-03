@@ -4,7 +4,6 @@
 
 use crate::node::{Edge, Node};
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -23,11 +22,11 @@ pub enum WorkflowError {
 /// ワークフロービルダー
 #[derive(Default)]
 pub struct WorkflowBuilder {
-    nodes: Vec<Rc<Node>>,
+    nodes: Vec<Arc<Node>>,
 }
 impl WorkflowBuilder {
     /// ノードの追加
-    pub fn add_node(self, node: Rc<Node>) -> Result<Self, WorkflowError> {
+    pub fn add_node(self, node: Arc<Node>) -> Result<Self, WorkflowError> {
         let mut nodes = self.nodes;
         if nodes.contains(&node) {
             return Err(WorkflowError::NodeIsAlreadyAdded);
@@ -53,7 +52,7 @@ impl WorkflowBuilder {
 /// ワークフロー
 pub struct Workflow {
     /// Edge を入力に持つ Node へのマップ
-    input_to_node: HashMap<Arc<Edge>, Rc<Node>>,
+    input_to_node: HashMap<Arc<Edge>, Arc<Node>>,
 }
 impl Workflow {
     // ワークフローの API は再検討が必要
@@ -65,7 +64,7 @@ impl Workflow {
     /// TODO: ワークフローの開始の API を再検討する
     /// 現状 Edge を引数に取るが、最初にデータを入れるべき Edge を保持していない。
     /// 他のワークフローから呼び出すために、コンテナを直接流し込める形である必要がある。
-    pub fn start(&self, edge: Arc<Edge>) -> Result<Rc<Node>, WorkflowError> {
+    pub fn start(&self, edge: Arc<Edge>) -> Result<Arc<Node>, WorkflowError> {
         if let Some(node) = self.input_to_node.get(&edge) {
             Ok(node.clone())
         } else {
@@ -80,7 +79,7 @@ impl Workflow {
     /// # Arguments
     ///
     /// * `edge` - エッジ
-    pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Rc<Node>> {
+    pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Arc<Node>> {
         self.input_to_node.get(edge).cloned()
     }
 }
@@ -92,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder() {
-        let node = Rc::new(UserNode::new_test(vec![]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![]).to_node());
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -102,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_add_node() {
-        let node = Rc::new(UserNode::new_test(vec![]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![]).to_node());
         let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -116,9 +115,9 @@ mod tests {
         let edge = node0.add_output::<i32>();
         let node1 = UserNode::new_test(vec![edge.clone()]);
         let wf = WorkflowBuilder::default()
-            .add_node(Rc::new(node0.to_node()))
+            .add_node(Arc::new(node0.to_node()))
             .unwrap()
-            .add_node(Rc::new(node1.to_node()))
+            .add_node(Arc::new(node1.to_node()))
             .unwrap()
             .build();
         assert_eq!(wf.input_to_node.len(), 1);
@@ -128,7 +127,7 @@ mod tests {
     fn test_workflow_start() {
         let edge = Arc::new(Edge::new::<i32>());
         let node0 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Rc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node());
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
@@ -141,7 +140,7 @@ mod tests {
     fn test_workflow_start_invalid_edge() {
         let mut node0 = UserNode::new_test(vec![]);
         let edge = node0.add_output::<i32>();
-        let node0_rc = Rc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node());
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
@@ -154,7 +153,7 @@ mod tests {
     fn test_workflow_get_node() {
         let edge = Arc::new(Edge::new::<i32>());
         let node0 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Rc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node());
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()

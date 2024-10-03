@@ -8,6 +8,7 @@ use crate::workflow::{Workflow, WorkflowBuilder};
 use log::{debug, info};
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
@@ -82,7 +83,7 @@ impl ProcessorBuilder {
         let workflow = {
             let mut workflow = Vec::new();
             for builder in self.workflow {
-                workflow.push(Rc::new(builder.build()));
+                workflow.push(Arc::new(builder.build()));
             }
             workflow
         };
