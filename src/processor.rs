@@ -135,7 +135,9 @@ impl ProcessorBuilder {
                     break;
                 }
 
-                debug!("Get nodes enabled to run");
+                if op.has_executable_node().await {
+                    debug!("Get nodes enabled to run");
+                }
                 while !handlers.is_full() {
                     let handle = if let Some((node, exec_id)) = op.get_next_node().await {
                         let op_clone = op.clone();
@@ -160,7 +162,9 @@ impl ProcessorBuilder {
                 }
 
                 let mut finished = Vec::new();
-                debug!("Check running tasks");
+                if handlers.is_running() {
+                    debug!("Check running tasks");
+                }
                 for (key, handle) in handlers.iter() {
                     tokio::select! {
                             // タスクが終了した場合
