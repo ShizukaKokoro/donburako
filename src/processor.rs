@@ -4,7 +4,7 @@
 
 use crate::container::Container;
 use crate::node::Edge;
-use crate::operator::{ExecutorId, Operator};
+use crate::operator::{ExecutableQueue, ExecutorId, Operator};
 use crate::workflow::{Workflow, WorkflowBuilder};
 use log::{debug, info};
 use std::collections::{BinaryHeap, HashMap, VecDeque};
@@ -97,6 +97,7 @@ impl ProcessorBuilder {
         let mut handlers: Handlers<()> = Handlers::new(n);
         let op = Operator::new(self.workflow);
         let op_clone = op.clone();
+        let mut queue = ExecutableQueue::default();
         debug!("End setting up processor: capacity={}", n);
 
         let (tx, mut rx): (mpsc::Sender<StartMessage>, mpsc::Receiver<StartMessage>) =

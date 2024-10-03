@@ -3,7 +3,7 @@
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::node::{Edge, Node};
 use crate::workflow::{Workflow, WorkflowBuilder};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -28,6 +28,28 @@ impl ExecutorId {
     /// TODO: 後でこの関数は隠蔽される。
     pub fn new() -> Self {
         Self(Uuid::new_v4())
+    }
+}
+
+/// 実行可能なノードのキュー
+#[derive(Debug, Default)]
+pub struct ExecutableQueue {
+    queue: VecDeque<(Arc<Node>, ExecutorId)>,
+    set: HashSet<(Arc<Node>, ExecutorId)>,
+}
+impl ExecutableQueue {
+    /// 新しい実行可能なノードのキューの生成
+    pub fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) {
+        if self.set.insert((node.clone(), exec_id)) {
+            self.queue.push_back((node.clone(), exec_id));
+        }
+    }
+
+    /// ノードの取得
+    pub fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
+        let item = self.queue.pop_front();
+        assert!(self.set.remove(&item.clone().unwrap()));
+        item
     }
 }
 
