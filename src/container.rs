@@ -254,8 +254,8 @@ impl ContainerMap {
     pub fn get_executable_nodes(
         &self,
         node: &Arc<Node>,
-        wf: &Workflow,
         exec_id: ExecutorId,
+        wf: &Workflow,
     ) -> Vec<Arc<Node>> {
         let mut nodes = Vec::new();
         let mut node_set = HashSet::new();
@@ -533,15 +533,15 @@ mod tests {
         // node0 は実行可能
         assert!(cmap.check_node_executable(&node0_rc, exec_id));
         // node0 はまだ実行されていない
-        let nodes = cmap.get_executable_nodes(&node0_rc, &wf, exec_id);
+        let nodes = cmap.get_executable_nodes(&node0_rc, exec_id, &wf);
         assert_eq!(nodes, vec![]);
         // node0 を実行
         cmap.add_new_container(edge2, exec_id, 42).unwrap();
-        let nodes = cmap.get_executable_nodes(&node0_rc, &wf, exec_id);
+        let nodes = cmap.get_executable_nodes(&node0_rc, exec_id, &wf);
         assert_eq!(nodes, vec![]);
         // node1 を実行
         cmap.add_new_container(edge3, exec_id, "42").unwrap();
-        let nodes = cmap.get_executable_nodes(&node1_rc, &wf, exec_id);
+        let nodes = cmap.get_executable_nodes(&node1_rc, exec_id, &wf);
         assert_eq!(nodes, vec![node2_rc.clone()]);
     }
 

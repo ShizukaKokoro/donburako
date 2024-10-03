@@ -50,6 +50,7 @@ impl WorkflowBuilder {
 }
 
 /// ワークフロー
+#[derive(Debug)]
 pub struct Workflow {
     /// Edge を入力に持つ Node へのマップ
     input_to_node: HashMap<Arc<Edge>, Arc<Node>>,

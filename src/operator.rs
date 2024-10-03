@@ -2,7 +2,7 @@
 
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::node::{Edge, Node};
-use crate::workflow::Workflow;
+use crate::workflow::{Workflow, WorkflowBuilder};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -43,12 +43,26 @@ pub enum State {
 /// オペレーター
 ///
 /// コンテナと実行IDごとのワークフローの状態を管理する。
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Operator {
+    workflows: Arc<Vec<Workflow>>,
     containers: Arc<Mutex<ContainerMap>>,
     executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
 }
 impl Operator {
+    /// 新しいオペレーターの生成
+    pub fn new(builders: Vec<WorkflowBuilder>) -> Self {
+        let workflows = builders
+            .into_iter()
+            .map(|builder| builder.build())
+            .collect();
+        Self {
+            workflows: Arc::new(workflows),
+            containers: Arc::new(Mutex::new(ContainerMap::default())),
+            executors: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
     /// 新しいコンテナの追加
     ///
     /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
@@ -101,13 +115,14 @@ impl Operator {
     pub async fn get_executable_nodes(
         &self,
         node: &Arc<Node>,
-        wf: &Workflow,
         exec_id: ExecutorId,
+        index: usize,
     ) -> Vec<Arc<Node>> {
-        self.containers
-            .lock()
-            .await
-            .get_executable_nodes(node, wf, exec_id)
+        self.containers.lock().await.get_executable_nodes(
+            node,
+            exec_id,
+            self.workflows.get(index).unwrap(),
+        )
     }
 
     /// コンテナの取得
@@ -157,6 +172,13 @@ impl Operator {
             .await
             .insert(exec_id, State::Running(index));
     }
+
+    /// ワークフローの取得
+    ///
+    /// TODO: この関数は後で削除する。
+    pub fn get_workflow(&self, index: usize) -> &Workflow {
+        self.workflows.get(index).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +187,7 @@ mod test {
 
     #[tokio::test]
     async fn test_operator_start_workflow() {
-        let op = Operator::default();
+        let op = Operator::new(vec![]);
         let exec_id = ExecutorId::new();
         op.start_workflow(exec_id, 0).await;
         let executors = op.executors.lock().await;

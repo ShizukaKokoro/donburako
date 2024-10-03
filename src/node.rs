@@ -216,7 +216,7 @@ mod tests {
     async fn test_node_run() {
         let exec_id = ExecutorId::new();
         let node = UserNode::new_test(vec![]).to_node();
-        let op = Operator::default();
+        let op = Operator::new(vec![]);
         node.run(&op, exec_id).await;
     }
 }

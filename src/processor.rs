@@ -94,15 +94,8 @@ impl ProcessorBuilder {
     /// ビルド
     pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
         debug!("Start building processor");
-        let workflow = {
-            let mut workflow = Vec::new();
-            for builder in self.workflow {
-                workflow.push(builder.build());
-            }
-            workflow
-        };
         let mut handlers: Handlers<()> = Handlers::new(n);
-        let op = Operator::default();
+        let op = Operator::new(self.workflow);
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
