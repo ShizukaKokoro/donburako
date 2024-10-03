@@ -84,6 +84,7 @@
 
 pub mod container;
 pub mod node;
+pub mod operator;
 pub mod processor;
 pub mod workflow;
 

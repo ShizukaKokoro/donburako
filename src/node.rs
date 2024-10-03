@@ -6,8 +6,7 @@
 //! ノードは実行時に、コンテナが保存されている構造体を受け取り、その中のデータを読み書きすることになる。
 //! ノード同士の繋がりはエッジによって表される。
 
-use crate::container::ContainerMap;
-use crate::processor::ExecutorId;
+use crate::operator::{ExecutorId, Operator};
 use std::any::TypeId;
 use std::future::Future;
 use std::pin::Pin;
@@ -47,12 +46,12 @@ impl Node {
     ///
     /// # Arguments
     ///
-    /// * `container_map` - コンテナマップ
-    pub async fn run(&self, container_map: &ContainerMap, exec_id: ExecutorId) {
+    /// * `op` - オペレーター
+    pub async fn run(&self, op: &Operator, exec_id: ExecutorId) {
         match &self.kind {
             NodeType::User(node) => {
                 let func = &node.func;
-                func(node, container_map, exec_id).await;
+                func(node, op, exec_id).await;
             }
         }
     }
@@ -98,7 +97,7 @@ pub enum NodeType {
 type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
 type AsyncFn =
-    dyn for<'a> Fn(&'a UserNode, &'a ContainerMap, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
+    dyn for<'a> Fn(&'a UserNode, &'a Operator, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
 
 /// ユーザー定義ノード
 ///
@@ -217,7 +216,7 @@ mod tests {
     async fn test_node_run() {
         let exec_id = ExecutorId::new();
         let node = UserNode::new_test(vec![]).to_node();
-        let container_map = ContainerMap::default();
-        node.run(&container_map, exec_id).await;
+        let op = Operator::default();
+        node.run(&op, exec_id).await;
     }
 }

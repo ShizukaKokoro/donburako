@@ -2,8 +2,9 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
-use crate::container::{Container, ContainerMap};
+use crate::container::Container;
 use crate::node::Edge;
+use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{Workflow, WorkflowBuilder};
 use log::{debug, info};
 use std::collections::{BinaryHeap, HashMap, VecDeque};
@@ -61,20 +62,6 @@ impl<T> Handlers<T> {
     }
 }
 
-/// 実行ID
-///
-/// TODO: 後で Default トレイトを削除する。
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Default)]
-pub struct ExecutorId(Uuid);
-impl ExecutorId {
-    /// 実行IDの生成
-    ///
-    /// TODO: 後でこの関数は隠蔽される。
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
-
 /// 開始メッセージ
 pub struct StartMessage {
     index: usize,
@@ -110,14 +97,14 @@ impl ProcessorBuilder {
         let workflow = {
             let mut workflow = Vec::new();
             for builder in self.workflow {
-                workflow.push(Arc::new(builder.build()));
+                workflow.push(builder.build());
             }
             workflow
         };
         let mut handlers: Handlers<()> = Handlers::new(n);
-        let cons = ContainerMap::default();
-        let cons_clone = cons.clone();
-        let mut exec_map: HashMap<ExecutorId, Arc<Workflow>> = HashMap::new();
+        let op = Operator::default();
+        let op_clone = op.clone();
+        let mut exec_map: HashMap<ExecutorId, usize> = HashMap::new();
         debug!("End setting up processor: capacity={}", n);
 
         let (tx, mut rx): (mpsc::Sender<StartMessage>, mpsc::Receiver<StartMessage>) =
@@ -135,9 +122,8 @@ impl ProcessorBuilder {
                         "Start workflow: {:?} with id: {:?}",
                         message.index, message.exec_id
                     );
-                    let wf = workflow[message.index].clone();
                     let exec_id = message.exec_id;
-                    let _ = exec_map.insert(exec_id, wf);
+                    let _ = exec_map.insert(exec_id, message.index);
                 }
 
                 debug!("Get nodes enabled to run");
@@ -166,7 +152,7 @@ impl ProcessorBuilder {
         });
 
         Ok(Processor {
-            cons: cons_clone,
+            op: op_clone,
             handle,
             tx,
             cancel,
@@ -176,7 +162,7 @@ impl ProcessorBuilder {
 
 /// プロセッサー
 pub struct Processor {
-    cons: ContainerMap,
+    op: Operator,
     handle: JoinHandle<Result<(), ProcessorError>>,
     tx: mpsc::Sender<StartMessage>,
     cancel: CancellationToken,
