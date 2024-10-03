@@ -109,9 +109,10 @@ impl Operator {
             State::Running(index) => index,
             _ => return Err(OperatorError::NotStarted),
         };
-        let node = self.workflows[*index].get_node(edge).unwrap();
-        if self.check_node_executable(&node, exec_id).await {
-            self.queue.lock().await.push(node, exec_id);
+        if let Some(node) = self.workflows[*index].get_node(edge) {
+            if self.check_node_executable(&node, exec_id).await {
+                self.queue.lock().await.push(node, exec_id);
+            }
         }
         Ok(())
     }
@@ -155,30 +156,6 @@ impl Operator {
             .lock()
             .await
             .check_node_executable(node, exec_id)
-    }
-
-    /// 実行が可能なノードを取得する
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - 終了したノード
-    /// * `exec_id` - 実行ID
-    /// * `wf` - ワークフロー
-    ///
-    /// # Returns
-    ///
-    /// 実行可能なノードの Vec
-    pub async fn get_executable_nodes(
-        &self,
-        node: &Arc<Node>,
-        exec_id: ExecutorId,
-        index: usize,
-    ) -> Vec<Arc<Node>> {
-        self.containers.lock().await.get_executable_nodes(
-            node,
-            exec_id,
-            self.workflows.get(index).unwrap(),
-        )
     }
 
     /// コンテナの取得
@@ -231,6 +208,11 @@ impl Operator {
             .insert(exec_id, State::Running(index));
     }
 
+    /// 次に実行するノードを取得する
+    pub async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
+        self.queue.lock().await.pop()
+    }
+
     /// ワークフローの取得
     ///
     /// TODO: この関数は後で削除する。
@@ -269,5 +251,21 @@ mod test {
         op.start_workflow(exec_id, 0).await;
         let executors = op.executors.lock().await;
         assert_eq!(executors.get(&exec_id), Some(&State::Running(0)));
+    }
+
+    #[tokio::test]
+    async fn test_operator_get_next_node() {
+        let edge = Arc::new(Edge::new::<&str>());
+        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node());
+        let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let op = Operator::new(vec![builder]);
+        let exec_id = ExecutorId::new();
+        op.start_workflow(exec_id, 0).await;
+        op.add_new_container(edge.clone(), exec_id, "test")
+            .await
+            .unwrap();
+        op.enqueue_node_if_executable(&edge, exec_id).await.unwrap();
+        let next = op.get_next_node().await.unwrap();
+        assert_eq!(next, (node, exec_id));
     }
 }
