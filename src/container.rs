@@ -6,9 +6,8 @@
 
 use crate::node::{Edge, Node, NodeType};
 use crate::operator::ExecutorId;
-use crate::workflow::Workflow;
 use std::any::{Any, TypeId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
@@ -284,10 +283,7 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        node::{Edge, UserNode},
-        workflow::WorkflowBuilder,
-    };
+    use crate::node::{Edge, UserNode};
     use pretty_assertions::assert_eq;
 
     #[test]
