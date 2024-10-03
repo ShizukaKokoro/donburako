@@ -8,6 +8,7 @@ use crate::workflow::WorkflowBuilder;
 use log::{debug, info};
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
@@ -75,6 +76,8 @@ impl<T> Handlers<T> {
 #[derive(Default)]
 pub struct ProcessorBuilder {
     workflow: Vec<WorkflowBuilder>,
+    check_time: Duration,
+    loop_wait_time: Duration,
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -85,7 +88,35 @@ impl ProcessorBuilder {
     pub fn add_workflow(self, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
         wfs.push(wf);
-        Self { workflow: wfs }
+        Self {
+            workflow: wfs,
+            check_time: Duration::from_millis(10),
+            loop_wait_time: Duration::from_millis(1),
+        }
+    }
+
+    /// チェック時間の設定
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - チェック時間
+    pub fn set_check_time_millis(self, time: u64) -> Self {
+        Self {
+            check_time: Duration::from_millis(time),
+            ..self
+        }
+    }
+
+    /// ループ待機時間の設定
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - ループ待機時間
+    pub fn set_loop_wait_time_millis(self, time: u64) -> Self {
+        Self {
+            loop_wait_time: Duration::from_millis(time),
+            ..self
+        }
     }
 
     /// ビルド
@@ -138,13 +169,13 @@ impl ProcessorBuilder {
                                 finished.push(key);
                             }
                             // タスクが終了していない場合
-                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {}
+                            _ = tokio::time::sleep(self.check_time) => {}
                     }
                 }
                 for key in finished {
                     handlers.remove(key);
                 }
-                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                tokio::time::sleep(self.loop_wait_time).await;
             }
             Ok(())
         });
