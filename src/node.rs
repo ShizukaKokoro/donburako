@@ -30,13 +30,15 @@ impl NodeId {
 pub struct Node {
     id: NodeId,
     kind: NodeType,
+    name: &'static str,
 }
 impl Node {
     /// ノードの生成
-    pub fn new(kind: NodeType) -> Self {
+    pub fn new(kind: NodeType, name: &'static str) -> Self {
         Node {
             id: NodeId::new(),
             kind,
+            name,
         }
     }
 
@@ -80,6 +82,11 @@ impl Node {
         match &self.kind {
             NodeType::User(node) => node.is_blocking(),
         }
+    }
+
+    /// ノードの名前の取得
+    pub fn name(&self) -> &'static str {
+        self.name
     }
 }
 impl std::cmp::PartialEq for Node {
@@ -163,8 +170,8 @@ impl UserNode {
     }
 
     /// ノードに変換
-    pub fn to_node(self) -> Node {
-        Node::new(NodeType::User(self))
+    pub fn to_node(self, name: &'static str) -> Node {
+        Node::new(NodeType::User(self), name)
     }
 }
 impl std::fmt::Debug for UserNode {
@@ -222,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn test_node_run() {
         let exec_id = ExecutorId::new();
-        let node = UserNode::new_test(vec![]).to_node();
+        let node = UserNode::new_test(vec![]).to_node("node");
         let op = Operator::new(vec![]);
         node.run(&op, exec_id).await;
     }

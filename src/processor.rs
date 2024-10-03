@@ -158,10 +158,21 @@ impl ProcessorBuilder {
                                 Ok(())
                             })
                         } else {
-                            spawn(async move {
-                                node.run(&op_clone, exec_id).await;
-                                Ok(())
-                            })
+                            #[cfg(not(feature = "dev"))]
+                            {
+                                spawn(async move {
+                                    node.run(&op_clone, exec_id).await;
+                                    Ok(())
+                                })
+                            }
+                            #[cfg(feature = "dev")]
+                            tokio::task::Builder::new()
+                                .name(node.name())
+                                .spawn(async move {
+                                    node.run(&op_clone, exec_id).await;
+                                    Ok(())
+                                })
+                                .unwrap()
                         }
                     } else {
                         break;

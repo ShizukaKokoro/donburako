@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder() {
-        let node = Arc::new(UserNode::new_test(vec![]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![]).to_node("node"));
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_add_node() {
-        let node = Arc::new(UserNode::new_test(vec![]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![]).to_node("node"));
         let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -150,9 +150,9 @@ mod tests {
         let edge = node0.add_output::<i32>();
         let node1 = UserNode::new_test(vec![edge.clone()]);
         let wf = WorkflowBuilder::default()
-            .add_node(Arc::new(node0.to_node()))
+            .add_node(Arc::new(node0.to_node("node0")))
             .unwrap()
-            .add_node(Arc::new(node1.to_node()))
+            .add_node(Arc::new(node1.to_node("node1")))
             .unwrap()
             .build();
         assert_eq!(wf.input_to_node.len(), 1);
@@ -162,7 +162,7 @@ mod tests {
     fn test_workflow_start() {
         let edge = Arc::new(Edge::new::<i32>());
         let node0 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Arc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node("node0"));
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
@@ -175,7 +175,7 @@ mod tests {
     fn test_workflow_start_invalid_edge() {
         let mut node0 = UserNode::new_test(vec![]);
         let edge = node0.add_output::<i32>();
-        let node0_rc = Arc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node("node0"));
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
@@ -188,7 +188,7 @@ mod tests {
     fn test_workflow_get_node() {
         let edge = Arc::new(Edge::new::<i32>());
         let node0 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Arc::new(node0.to_node());
+        let node0_rc = Arc::new(node0.to_node("node0"));
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
@@ -204,9 +204,9 @@ mod tests {
         let node0 = UserNode::new_test(vec![edge0.clone()]);
         let node1 = UserNode::new_test(vec![edge1.clone()]);
         let wf = WorkflowBuilder::default()
-            .add_node(Arc::new(node0.to_node()))
+            .add_node(Arc::new(node0.to_node("node0")))
             .unwrap()
-            .add_node(Arc::new(node1.to_node()))
+            .add_node(Arc::new(node1.to_node("node1")))
             .unwrap()
             .build();
         let mut result = HashSet::new();
@@ -226,9 +226,9 @@ mod tests {
         let mut node1 = UserNode::new_test(vec![]);
         let edge1 = node1.add_output::<i32>();
         let wf = WorkflowBuilder::default()
-            .add_node(Arc::new(node0.to_node()))
+            .add_node(Arc::new(node0.to_node("node0")))
             .unwrap()
-            .add_node(Arc::new(node1.to_node()))
+            .add_node(Arc::new(node1.to_node("node1")))
             .unwrap()
             .build();
         let mut result = HashSet::new();

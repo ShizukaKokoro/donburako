@@ -462,7 +462,7 @@ mod tests {
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
 
-        let node = Arc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node("node"));
         assert!(!map.check_node_executable(&node, exec_id));
 
         map.add_new_container(edge1.clone(), exec_id, "42").unwrap();

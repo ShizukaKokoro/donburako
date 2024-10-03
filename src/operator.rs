@@ -229,7 +229,7 @@ mod test {
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
@@ -255,7 +255,7 @@ mod test {
     #[tokio::test]
     async fn test_operator_get_next_node() {
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node());
+        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
