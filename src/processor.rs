@@ -2,18 +2,24 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
+use crate::node::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::WorkflowBuilder;
 use log::{debug, info};
 use std::collections::VecDeque;
+use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc;
+use tokio::runtime::Handle;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
 
 /// プロセッサーエラー
 #[derive(Debug, Error, PartialEq)]
 pub enum ProcessorError {
+    /// オペレーターエラー
+    #[error("Operator error")]
+    OperatorError(#[from] crate::operator::OperatorError),
+
     /// ワークフローの開始に失敗
     #[error("Failed to start workflow")]
     FailedToStartWorkflow,
@@ -61,18 +67,6 @@ impl<T> Handlers<T> {
     }
 }
 
-/// 開始メッセージ
-pub struct StartMessage {
-    index: usize,
-    exec_id: ExecutorId,
-}
-impl StartMessage {
-    fn new(index: usize) -> (Self, ExecutorId) {
-        let exec_id = ExecutorId::new();
-        (Self { index, exec_id }, exec_id)
-    }
-}
-
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
@@ -98,8 +92,6 @@ impl ProcessorBuilder {
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
-        let (tx, mut rx): (mpsc::Sender<StartMessage>, mpsc::Receiver<StartMessage>) =
-            mpsc::channel(16);
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
@@ -108,35 +100,47 @@ impl ProcessorBuilder {
                     break;
                 }
 
-                while let Ok(message) = rx.try_recv() {
-                    debug!(
-                        "Start workflow: {:?} with id: {:?}",
-                        message.index, message.exec_id
-                    );
-                    op.start_workflow(message.exec_id, message.index).await;
-                }
-
                 debug!("Get nodes enabled to run");
-                todo!(); // TODO: ワークフローの次に実行可能なノードを取得し、タスクのスレッドを handles に追加する
+                while !handlers.is_full() {
+                    let handle = if let Some((node, exec_id)) = op.get_next_node().await {
+                        let op_clone = op.clone();
+                        if node.is_blocking() {
+                            spawn(async move {
+                                node.run(&op_clone, exec_id).await;
+                                Ok(())
+                            })
+                        } else {
+                            let rt_handle = Handle::current();
+                            spawn_blocking(move || {
+                                rt_handle.block_on(async {
+                                    node.run(&op_clone, exec_id).await;
+                                });
+                                Ok(())
+                            })
+                        }
+                    } else {
+                        break;
+                    };
+                    handlers.push(handle);
+                }
 
                 let mut finished = Vec::new();
                 debug!("Check running tasks");
                 for (key, handle) in handlers.iter() {
                     tokio::select! {
                             // タスクが終了した場合
-                            res = handle => {
+                            _ = handle => {
                                 debug!("Task is done(at {} / {})", key, n);
-                                todo!(); // TODO: タスクの終了処理を行う
                                 finished.push(key);
                             }
                             // タスクが終了していない場合
-                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {}
+                            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {}
                     }
                 }
                 for key in finished {
                     handlers.remove(key);
                 }
-                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
             }
             Ok(())
         });
@@ -144,7 +148,6 @@ impl ProcessorBuilder {
         Ok(Processor {
             op: op_clone,
             handle,
-            tx,
             cancel,
         })
     }
@@ -154,7 +157,6 @@ impl ProcessorBuilder {
 pub struct Processor {
     op: Operator,
     handle: JoinHandle<Result<(), ProcessorError>>,
-    tx: mpsc::Sender<StartMessage>,
     cancel: CancellationToken,
 }
 impl Processor {
@@ -165,8 +167,8 @@ impl Processor {
     /// * `index` - ワークフローのインデックス
     pub async fn start(&self, index: usize) -> ExecutorId {
         info!("Start workflow: {:?}", index);
-        let (message, id) = StartMessage::new(index);
-        self.tx.send(message).await.unwrap();
+        let id = ExecutorId::new();
+        self.op.start_workflow(id, index).await;
         id
     }
 
