@@ -13,6 +13,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 /// プロセッサーエラー
 #[derive(Debug, Error, PartialEq)]
@@ -60,6 +61,27 @@ impl<T> Handlers<T> {
     }
 }
 
+/// 実行ID
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct ExecutorId(Uuid);
+impl ExecutorId {
+    fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+/// 開始メッセージ
+pub struct StartMessage {
+    index: usize,
+    exec_id: ExecutorId,
+}
+impl StartMessage {
+    fn new(index: usize) -> (Self, ExecutorId) {
+        let exec_id = ExecutorId::new();
+        (Self { index, exec_id }, exec_id)
+    }
+}
+
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
@@ -89,9 +111,12 @@ impl ProcessorBuilder {
         };
         let mut handlers: Handlers<()> = Handlers::new(n);
         let cons = ContainerMap::default();
+        let cons_clone = cons.clone();
+        let mut exec_map: HashMap<ExecutorId, Arc<Workflow>> = HashMap::new();
         debug!("End setting up processor: capacity={}", n);
 
-        let (tx, mut rx): (mpsc::Sender<usize>, mpsc::Receiver<usize>) = mpsc::channel(16);
+        let (tx, mut rx): (mpsc::Sender<StartMessage>, mpsc::Receiver<StartMessage>) =
+            mpsc::channel(16);
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
         let handle = spawn(async move {
@@ -101,9 +126,14 @@ impl ProcessorBuilder {
                     break;
                 }
 
-                while let Ok(wf_id) = rx.try_recv() {
-                    debug!("Start workflow: {:?}", wf_id);
-                    todo!(); // TODO: ワークフローをスレッド外から開始する
+                while let Ok(message) = rx.try_recv() {
+                    debug!(
+                        "Start workflow: {:?} with id: {:?}",
+                        message.index, message.exec_id
+                    );
+                    let wf = workflow[message.index].clone();
+                    let exec_id = message.exec_id;
+                    let _ = exec_map.insert(exec_id, wf);
                 }
 
                 debug!("Get nodes enabled to run");
@@ -131,14 +161,20 @@ impl ProcessorBuilder {
             Ok(())
         });
 
-        Ok(Processor { handle, tx, cancel })
+        Ok(Processor {
+            cons: cons_clone,
+            handle,
+            tx,
+            cancel,
+        })
     }
 }
 
 /// プロセッサー
 pub struct Processor {
+    cons: ContainerMap,
     handle: JoinHandle<Result<(), ProcessorError>>,
-    tx: mpsc::Sender<usize>,
+    tx: mpsc::Sender<StartMessage>,
     cancel: CancellationToken,
 }
 impl Processor {
@@ -146,10 +182,12 @@ impl Processor {
     ///
     /// # Arguments
     ///
-    /// * `wf_id` - ワークフローID
-    pub async fn start(&self, wf_id: usize) {
-        info!("Start workflow: {:?}", wf_id);
-        self.tx.send(wf_id).await.unwrap();
+    /// * `index` - ワークフローのインデックス
+    pub async fn start(&self, index: usize) -> ExecutorId {
+        info!("Start workflow: {:?}", index);
+        let (message, id) = StartMessage::new(index);
+        self.tx.send(message).await.unwrap();
+        id
     }
 
     /// プロセッサーの停止
