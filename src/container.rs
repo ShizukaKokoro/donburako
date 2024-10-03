@@ -5,6 +5,7 @@
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
 use crate::node::{Edge, Node, NodeType};
+use crate::processor::ExecutorId;
 use crate::workflow::Workflow;
 use std::any::{Any, TypeId};
 use std::collections::{HashMap, HashSet};
@@ -168,6 +169,8 @@ impl Drop for Container {
     }
 }
 
+type ContainerMapInner = HashMap<(Arc<Edge>, ExecutorId), Container>;
+
 /// コンテナマップ
 ///
 /// コンテナを管理するためのマップ。
@@ -177,9 +180,8 @@ impl Drop for Container {
 /// 内部に状態をもつため、実行順に影響を受ける。
 #[derive(Default, Debug, Clone)]
 pub struct ContainerMap {
-    // TODO: 実行IDに対応する
     // TODO: イテレーション番号に対応する
-    map: Arc<Mutex<HashMap<Arc<Edge>, Container>>>,
+    map: Arc<Mutex<ContainerMapInner>>,
     // counter: AtomicUsize,
 }
 impl ContainerMap {
@@ -194,6 +196,7 @@ impl ContainerMap {
     pub async fn add_new_container<T: 'static + Send + Sync>(
         &self,
         edge: Arc<Edge>,
+        exec_id: ExecutorId,
         data: T,
     ) -> Result<(), ContainerError> {
         if !edge.check_type::<T>() {
@@ -201,7 +204,7 @@ impl ContainerMap {
         }
         let mut container = Container::default();
         container.store(data);
-        let _ = self.map.lock().await.insert(edge, container);
+        let _ = self.map.lock().await.insert((edge, exec_id), container);
         Ok(())
     }
 
@@ -214,8 +217,8 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 存在する場合は true、そうでない場合は false
-    async fn check_edge_exists(&self, edge: &Arc<Edge>) -> bool {
-        self.map.lock().await.contains_key(edge)
+    async fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
+        self.map.lock().await.contains_key(&(edge, exec_id))
     }
 
     /// ノードが実行できるか確認する
@@ -229,12 +232,12 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 実行可能な場合は true、そうでない場合は false
-    pub async fn check_node_executable(&self, node: &Arc<Node>) -> bool {
+    pub async fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
         match node.kind() {
             NodeType::User(node) => {
                 let mut result = true;
                 for edge in node.inputs() {
-                    if !self.check_edge_exists(edge).await {
+                    if !self.check_edge_exists(edge.clone(), exec_id).await {
                         result = false;
                         break;
                     }
@@ -254,14 +257,19 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 実行可能なノードの Vec
-    pub async fn get_executable_nodes(&self, node: &Arc<Node>, wf: &Workflow) -> Vec<Arc<Node>> {
+    pub async fn get_executable_nodes(
+        &self,
+        node: &Arc<Node>,
+        wf: &Workflow,
+        exec_id: ExecutorId,
+    ) -> Vec<Arc<Node>> {
         let mut nodes = Vec::new();
         let mut node_set = HashSet::new();
         match node.kind() {
             NodeType::User(node) => {
                 for edge in node.outputs() {
                     if let Some(next_node) = wf.get_node(edge) {
-                        if self.check_node_executable(&next_node).await
+                        if self.check_node_executable(&next_node, exec_id).await
                             && !node_set.contains(&next_node)
                         {
                             nodes.push(next_node.clone());
@@ -283,8 +291,8 @@ impl ContainerMap {
     /// # Returns
     ///
     /// コンテナ
-    pub async fn get_container(&self, edge: &Arc<Edge>) -> Option<Container> {
-        self.map.lock().await.remove(edge)
+    pub async fn get_container(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> Option<Container> {
+        self.map.lock().await.remove(&(edge, exec_id))
     }
 
     /// 既存のコンテナの追加
@@ -298,12 +306,13 @@ impl ContainerMap {
     pub async fn add_container(
         &self,
         edge: Arc<Edge>,
+        exec_id: ExecutorId,
         container: Container,
     ) -> Result<(), ContainerError> {
         if !container.has_data() {
             return Err(ContainerError::DataNotFound);
         }
-        let _ = self.map.lock().await.insert(edge, container);
+        let _ = self.map.lock().await.insert((edge, exec_id), container);
         Ok(())
     }
 }
@@ -465,45 +474,59 @@ mod tests {
 
     #[tokio::test]
     async fn test_container_map_add_new_container() {
+        let exec_id = ExecutorId::new();
         let map = ContainerMap::default();
         let edge = Arc::new(Edge::new::<i32>());
-        let result = map.add_new_container(edge.clone(), 42).await;
+        let result = map.add_new_container(edge.clone(), exec_id, 42).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_container_map_check_edge_exists() {
+        let exec_id = ExecutorId::new();
         let map = ContainerMap::default();
         let edge = Arc::new(Edge::new::<i32>());
-        map.add_new_container(edge.clone(), 42).await.unwrap();
+        map.add_new_container(edge.clone(), exec_id, 42)
+            .await
+            .unwrap();
 
-        assert!(map.check_edge_exists(&edge).await);
+        assert!(map.check_edge_exists(edge, exec_id).await);
 
         let edge = Arc::new(Edge::new::<&str>());
-        assert!(!map.check_edge_exists(&edge).await);
+        assert!(!map.check_edge_exists(edge, exec_id).await);
     }
 
     #[tokio::test]
     async fn test_container_map_check_node_executable_user() {
+        let exec_id = ExecutorId::new();
         let map = ContainerMap::default();
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
-        map.add_new_container(edge0.clone(), 42).await.unwrap();
+        map.add_new_container(edge0.clone(), exec_id, 42)
+            .await
+            .unwrap();
 
         let node = Arc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node());
-        assert!(!map.check_node_executable(&node).await);
+        assert!(!map.check_node_executable(&node, exec_id).await);
 
-        map.add_new_container(edge1.clone(), "42").await.unwrap();
-        assert!(map.check_node_executable(&node).await);
+        map.add_new_container(edge1.clone(), exec_id, "42")
+            .await
+            .unwrap();
+        assert!(map.check_node_executable(&node, exec_id).await);
     }
 
     #[tokio::test]
     async fn test_container_map_get_executable_nodes() {
+        let exec_id = ExecutorId::new();
         let cmap = ContainerMap::default();
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
-        cmap.add_new_container(edge0.clone(), 42).await.unwrap();
-        cmap.add_new_container(edge1.clone(), "42").await.unwrap();
+        cmap.add_new_container(edge0.clone(), exec_id, 42)
+            .await
+            .unwrap();
+        cmap.add_new_container(edge1.clone(), exec_id, "42")
+            .await
+            .unwrap();
 
         let mut node0 = UserNode::new_test(vec![edge0.clone()]);
         let edge2 = node0.add_output::<i32>();
@@ -523,27 +546,30 @@ mod tests {
             .build();
 
         // node0 は実行可能
-        assert!(cmap.check_node_executable(&node0_rc).await);
+        assert!(cmap.check_node_executable(&node0_rc, exec_id).await);
         // node0 はまだ実行されていない
-        let nodes = cmap.get_executable_nodes(&node0_rc, &wf).await;
+        let nodes = cmap.get_executable_nodes(&node0_rc, &wf, exec_id).await;
         assert_eq!(nodes, vec![]);
         // node0 を実行
-        cmap.add_new_container(edge2, 42).await.unwrap();
-        let nodes = cmap.get_executable_nodes(&node0_rc, &wf).await;
+        cmap.add_new_container(edge2, exec_id, 42).await.unwrap();
+        let nodes = cmap.get_executable_nodes(&node0_rc, &wf, exec_id).await;
         assert_eq!(nodes, vec![]);
         // node1 を実行
-        cmap.add_new_container(edge3, "42").await.unwrap();
-        let nodes = cmap.get_executable_nodes(&node1_rc, &wf).await;
+        cmap.add_new_container(edge3, exec_id, "42").await.unwrap();
+        let nodes = cmap.get_executable_nodes(&node1_rc, &wf, exec_id).await;
         assert_eq!(nodes, vec![node2_rc.clone()]);
     }
 
     #[tokio::test]
     async fn test_container_map_get_container() {
+        let exec_id = ExecutorId::new();
         let map = ContainerMap::default();
         let edge = Arc::new(Edge::new::<i32>());
-        map.add_new_container(edge.clone(), 42).await.unwrap();
+        map.add_new_container(edge.clone(), exec_id, 42)
+            .await
+            .unwrap();
 
-        let container = map.get_container(&edge).await;
+        let container = map.get_container(edge, exec_id).await;
         assert!(container.is_some());
         let mut container = container.unwrap();
         let data = container.take::<i32>().unwrap();
@@ -552,13 +578,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_container_map_add_container() {
+        let exec_id = ExecutorId::new();
         let map = ContainerMap::default();
         let edge = Arc::new(Edge::new::<i32>());
         let mut container = Container::default();
         container.store(42);
-        map.add_container(edge.clone(), container).await.unwrap();
+        map.add_container(edge.clone(), exec_id, container)
+            .await
+            .unwrap();
 
-        let container = map.get_container(&edge).await;
+        let container = map.get_container(edge, exec_id).await;
         assert!(container.is_some());
         let mut container = container.unwrap();
         let data = container.take::<i32>().unwrap();

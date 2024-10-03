@@ -7,6 +7,7 @@
 //! ノード同士の繋がりはエッジによって表される。
 
 use crate::container::ContainerMap;
+use crate::processor::ExecutorId;
 use std::any::TypeId;
 use std::future::Future;
 use std::pin::Pin;
@@ -47,11 +48,11 @@ impl Node {
     /// # Arguments
     ///
     /// * `container_map` - コンテナマップ
-    pub async fn run(&self, container_map: &ContainerMap) {
+    pub async fn run(&self, container_map: &ContainerMap, exec_id: ExecutorId) {
         match &self.kind {
             NodeType::User(node) => {
                 let func = &node.func;
-                func(node, container_map).await;
+                func(node, container_map, exec_id).await;
             }
         }
     }
@@ -96,7 +97,8 @@ pub enum NodeType {
 
 type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
-type AsyncFn = dyn for<'a> Fn(&'a UserNode, &'a ContainerMap) -> BoxedFuture<'a> + Send + Sync;
+type AsyncFn =
+    dyn for<'a> Fn(&'a UserNode, &'a ContainerMap, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
 
 /// ユーザー定義ノード
 ///
@@ -127,7 +129,7 @@ impl UserNode {
         UserNode {
             inputs,
             outputs: Vec::new(),
-            func: Box::new(|_, _| Box::pin(async {})),
+            func: Box::new(|_, _, _| Box::pin(async {})),
             is_blocking: false,
         }
     }
@@ -213,8 +215,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_node_run() {
+        let exec_id = ExecutorId::new();
         let node = UserNode::new_test(vec![]).to_node();
         let container_map = ContainerMap::default();
-        node.run(&container_map).await;
+        node.run(&container_map, exec_id).await;
     }
 }
