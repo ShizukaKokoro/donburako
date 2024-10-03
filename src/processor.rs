@@ -17,6 +17,10 @@ use tokio_util::sync::CancellationToken;
 /// プロセッサーエラー
 #[derive(Debug, Error, PartialEq)]
 pub enum ProcessorError {
+    /// コンテナエラー
+    #[error("Container error")]
+    ContainerError(#[from] crate::container::ContainerError),
+
     /// オペレーターエラー
     #[error("Operator error")]
     OperatorError(#[from] crate::operator::OperatorError),
@@ -24,6 +28,10 @@ pub enum ProcessorError {
     /// ワークフローの開始に失敗
     #[error("Failed to start workflow")]
     FailedToStartWorkflow,
+
+    /// まだ終了していないエッジを取得しようとした
+    #[error("Not finished edge")]
+    NotFinishedEdge,
 }
 
 /// ハンドラ管理
@@ -226,6 +234,24 @@ impl Processor {
     ) -> Result<(), ProcessorError> {
         self.op.add_new_container(edge, exec_id, data).await?;
         Ok(())
+    }
+
+    /// データの取得
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    pub async fn take<T: 'static + Send + Sync>(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+    ) -> Result<T, ProcessorError> {
+        if let Some(mut con) = self.op.get_container(edge, exec_id).await {
+            Ok(con.take()?)
+        } else {
+            Err(ProcessorError::NotFinishedEdge)
+        }
     }
 
     /// プロセッサーの停止
