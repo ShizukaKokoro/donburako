@@ -213,6 +213,11 @@ impl Operator {
     pub async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
         self.queue.lock().await.pop()
     }
+
+    /// 実行可能なノードが存在するか確認する
+    pub async fn has_executable_node(&self) -> bool {
+        !self.queue.lock().await.queue.is_empty()
+    }
 }
 
 #[cfg(test)]
