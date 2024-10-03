@@ -130,7 +130,7 @@ impl ProcessorBuilder {
     /// ビルド
     pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
         debug!("Start building processor");
-        let mut handlers: Handlers<()> = Handlers::new(n);
+        let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
@@ -155,14 +155,14 @@ impl ProcessorBuilder {
                                 rt_handle.block_on(async {
                                     node.run(&op_clone, exec_id).await;
                                 });
-                                Ok(())
+                                Ok(node.name())
                             })
                         } else {
                             #[cfg(not(feature = "dev"))]
                             {
                                 spawn(async move {
                                     node.run(&op_clone, exec_id).await;
-                                    Ok(())
+                                    Ok(node.name())
                                 })
                             }
                             #[cfg(feature = "dev")]
@@ -170,7 +170,7 @@ impl ProcessorBuilder {
                                 .name(node.name())
                                 .spawn(async move {
                                     node.run(&op_clone, exec_id).await;
-                                    Ok(())
+                                    Ok(node.name())
                                 })
                                 .unwrap()
                         }
@@ -187,8 +187,10 @@ impl ProcessorBuilder {
                 for (key, handle) in handlers.iter() {
                     tokio::select! {
                             // タスクが終了した場合
-                            _ = handle => {
-                                debug!("Task is done(at {} / {})", key, n);
+                            res = handle => {
+                                if let Ok(name) = res {
+                                    debug!("Task is done: {:?}", name.unwrap());
+                                }
                                 finished.push(key);
                             }
                             // タスクが終了していない場合
