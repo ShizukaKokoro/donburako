@@ -65,6 +65,10 @@ impl<T> Handlers<T> {
     fn is_full(&self) -> bool {
         self.retains.is_empty()
     }
+
+    fn is_running(&self) -> bool {
+        self.retains.len() != self.handles.len()
+    }
 }
 
 /// プロセッサービルダー
