@@ -213,13 +213,6 @@ impl Operator {
     pub async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
         self.queue.lock().await.pop()
     }
-
-    /// ワークフローの取得
-    ///
-    /// TODO: この関数は後で削除する。
-    pub fn get_workflow(&self, index: usize) -> &Workflow {
-        self.workflows.get(index).unwrap()
-    }
 }
 
 #[cfg(test)]
