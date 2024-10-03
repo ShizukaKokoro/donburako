@@ -105,11 +105,12 @@ impl Operator {
         exec_id: ExecutorId,
     ) -> Result<(), OperatorError> {
         let exec = self.executors.lock().await;
-        let index = match exec.get(&exec_id).unwrap() {
-            State::Running(index) => index,
-            _ => return Err(OperatorError::NotStarted),
+        let index = if let Some(State::Running(index)) = exec.get(&exec_id) {
+            *index
+        } else {
+            return Err(OperatorError::NotStarted);
         };
-        if let Some(node) = self.workflows[*index].get_node(edge) {
+        if let Some(node) = self.workflows[index].get_node(edge) {
             if self.check_node_executable(&node, exec_id).await {
                 self.queue.lock().await.push(node, exec_id);
             }
