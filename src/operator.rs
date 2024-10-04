@@ -23,35 +23,31 @@ pub enum OperatorError {
 }
 
 /// 実行ID
-///
-/// TODO: 後で Default トレイトを削除する。
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Default)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ExecutorId(Uuid);
 impl ExecutorId {
     /// 実行IDの生成
-    ///
-    /// TODO: 後でこの関数は隠蔽される。
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }
 
 /// 実行可能なノードのキュー
 #[derive(Debug, Default)]
-pub struct ExecutableQueue {
+struct ExecutableQueue {
     queue: VecDeque<(Arc<Node>, ExecutorId)>,
     set: HashSet<(Arc<Node>, ExecutorId)>,
 }
 impl ExecutableQueue {
     /// 新しい実行可能なノードのキューの生成
-    pub fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) {
+    fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) {
         if self.set.insert((node.clone(), exec_id)) {
             self.queue.push_back((node.clone(), exec_id));
         }
     }
 
     /// ノードの取得
-    pub fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
+    fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
         if let Some(item) = self.queue.pop_front() {
             assert!(self.set.remove(&item));
             Some(item)
@@ -63,10 +59,11 @@ impl ExecutableQueue {
 
 /// 状態
 #[derive(Debug, PartialEq, Eq)]
-pub enum State {
+enum State {
     /// 実行中
     Running(usize),
     /// 終了
+    #[allow(dead_code)] // TODO: 終了状態を実装したら削除する
     Finished(usize),
 }
 
@@ -86,7 +83,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `builders` - ワークフロービルダーのリスト
-    pub fn new(builders: Vec<WorkflowBuilder>) -> Self {
+    pub(crate) fn new(builders: Vec<WorkflowBuilder>) -> Self {
         let workflows = builders
             .into_iter()
             .map(|builder| builder.build())
@@ -128,7 +125,7 @@ impl Operator {
     /// * `edge` - エッジ
     /// * `exec_id` - 実行ID
     /// * `data` - データ
-    pub async fn add_new_container<T: 'static + Send + Sync>(
+    pub(crate) async fn add_new_container<T: 'static + Send + Sync>(
         &self,
         edge: Arc<Edge>,
         exec_id: ExecutorId,
@@ -153,7 +150,11 @@ impl Operator {
     /// # Returns
     ///
     /// 実行可能な場合は true、そうでない場合は false
-    pub async fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
+    pub(crate) async fn check_node_executable(
+        &self,
+        node: &Arc<Node>,
+        exec_id: ExecutorId,
+    ) -> bool {
         self.containers
             .lock()
             .await
@@ -202,7 +203,7 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     /// * `index` - ワークフローのインデックス
-    pub async fn start_workflow(&self, exec_id: ExecutorId, index: usize) {
+    pub(crate) async fn start_workflow(&self, exec_id: ExecutorId, index: usize) {
         let _ = self
             .executors
             .lock()
@@ -210,13 +211,15 @@ impl Operator {
             .insert(exec_id, State::Running(index));
     }
 
+    // TODO: ワークフローが終了したか確認するメソッドを実装する
+
     /// 次に実行するノードを取得する
-    pub async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
+    pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
         self.queue.lock().await.pop()
     }
 
     /// 実行可能なノードが存在するか確認する
-    pub async fn has_executable_node(&self) -> bool {
+    pub(crate) async fn has_executable_node(&self) -> bool {
         !self.queue.lock().await.queue.is_empty()
     }
 }
