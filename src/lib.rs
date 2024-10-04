@@ -88,8 +88,6 @@ pub mod operator;
 pub mod processor;
 pub mod workflow;
 
-// TODO: 異なるワークフローの同時実行のテスト
-// TODO: 同一ワークフローの同時実行を実装
 // TODO: 複数のエッジからのデータを一つにまとめる統合ノードを実装
 // TODO: 条件分岐ノードを実装
 // TODO: イテレーターノードを実装(複数種類あるため、後で細かく TODO を記述)
