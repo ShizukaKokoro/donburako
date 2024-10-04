@@ -93,7 +93,7 @@ impl Node {
     pub fn outputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.outputs().clone(),
-            NodeType::FirstChoice(node) => vec![node.outputs().clone().unwrap()],
+            NodeType::FirstChoice(node) => vec![node.outputs().clone()],
         }
     }
 
@@ -251,8 +251,8 @@ impl FirstChoiceNode {
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> &Option<Arc<Edge>> {
-        &self.outputs
+    pub fn outputs(&self) -> &Arc<Edge> {
+        self.outputs.as_ref().unwrap()
     }
 
     /// ノードに変換
