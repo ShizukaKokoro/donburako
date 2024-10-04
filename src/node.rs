@@ -72,6 +72,23 @@ impl Node {
                 let func = &node.func;
                 func(node, op, exec_id).await;
             }
+            NodeType::If(node) => {
+                let mut con = op
+                    .get_container(node.input().clone(), exec_id)
+                    .await
+                    .unwrap();
+                if con.take::<bool>().unwrap() {
+                    con.store(());
+                    op.add_container(node.true_output().clone(), exec_id, con)
+                        .await
+                        .unwrap();
+                } else {
+                    con.store(());
+                    op.add_container(node.false_output().clone(), exec_id, con)
+                        .await
+                        .unwrap();
+                }
+            }
             NodeType::FirstChoice(node) => {
                 for edge in node.inputs() {
                     let con = op.get_container(edge.clone(), exec_id).await;
@@ -89,6 +106,7 @@ impl Node {
     pub fn inputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.inputs().clone(),
+            NodeType::If(node) => vec![node.input().clone()],
             NodeType::FirstChoice(node) => node.inputs().clone(),
         }
     }
@@ -97,6 +115,7 @@ impl Node {
     pub fn outputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.outputs().clone(),
+            NodeType::If(node) => vec![node.true_output().clone(), node.false_output().clone()],
             NodeType::FirstChoice(node) => vec![node.outputs().clone()],
         }
     }
@@ -110,6 +129,7 @@ impl Node {
     pub fn is_blocking(&self) -> bool {
         match &self.kind {
             NodeType::User(node) => node.is_blocking(),
+            NodeType::If(_) => false,
             NodeType::FirstChoice(_) => false,
         }
     }
@@ -136,6 +156,8 @@ impl std::hash::Hash for Node {
 pub enum NodeType {
     /// ユーザー定義ノード
     User(UserNode),
+    /// 分岐ノード
+    If(branch::IfNode),
     /// 最速ノード
     FirstChoice(FirstChoiceNode),
 }

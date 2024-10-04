@@ -241,6 +241,10 @@ impl ContainerMap {
                 }
                 result
             }
+            NodeType::If(node) => {
+                let edge = node.input();
+                self.check_edge_exists(edge.clone(), exec_id)
+            }
             NodeType::FirstChoice(node) => {
                 for edge in node.inputs() {
                     if self.check_edge_exists(edge.clone(), exec_id) {
@@ -477,6 +481,23 @@ mod tests {
         assert!(!map.check_node_executable(&node, exec_id));
 
         map.add_new_container(edge1.clone(), exec_id, "42").unwrap();
+        assert!(map.check_node_executable(&node, exec_id));
+    }
+
+    #[tokio::test]
+    async fn test_container_map_check_node_executable_if() {
+        let exec_id = ExecutorId::new();
+        let mut map = ContainerMap::default();
+        let edge = Arc::new(Edge::new::<bool>());
+
+        let node = Arc::new(
+            crate::node::branch::IfNode::new(edge.clone())
+                .unwrap()
+                .to_node("node"),
+        );
+        assert!(!map.check_node_executable(&node, exec_id));
+
+        map.add_new_container(edge.clone(), exec_id, true).unwrap();
         assert!(map.check_node_executable(&node, exec_id));
     }
 

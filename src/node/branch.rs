@@ -6,6 +6,69 @@ use super::edge::Edge;
 use super::*;
 use std::sync::Arc;
 
+/// 分岐ノード
+///
+/// 真偽値を受け取り、真の場合と偽の場合にそれぞれ異なるエッジにユニット型のデータを送る。
+#[derive(Debug)]
+pub struct IfNode {
+    input: Arc<Edge>,
+    true_output: Option<Arc<Edge>>,
+    false_output: Option<Arc<Edge>>,
+}
+impl IfNode {
+    /// ノードの生成
+    pub fn new(input: Arc<Edge>) -> Result<Self, NodeError> {
+        if !input.check_type::<bool>() {
+            return Err(NodeError::EdgeTypeMismatch);
+        }
+        Ok(IfNode {
+            input,
+            true_output: None,
+            false_output: None,
+        })
+    }
+
+    /// 真の出力エッジの追加
+    pub fn add_true_output(&mut self) -> Result<Arc<Edge>, NodeError> {
+        if self.true_output.is_some() {
+            return Err(NodeError::OutputEdgeExists);
+        }
+        let edge = Arc::new(Edge::new::<()>());
+        self.true_output = Some(edge.clone());
+        Ok(edge)
+    }
+
+    /// 偽の出力エッジの追加
+    pub fn add_false_output(&mut self) -> Result<Arc<Edge>, NodeError> {
+        if self.false_output.is_some() {
+            return Err(NodeError::OutputEdgeExists);
+        }
+        let edge = Arc::new(Edge::new::<()>());
+        self.false_output = Some(edge.clone());
+        Ok(edge)
+    }
+
+    /// 入力エッジの取得
+    pub fn input(&self) -> &Arc<Edge> {
+        &self.input
+    }
+
+    /// 真の出力エッジの取得
+    pub fn true_output(&self) -> &Arc<Edge> {
+        self.true_output.as_ref().unwrap()
+    }
+
+    /// 偽の出力エッジの取得
+    pub fn false_output(&self) -> &Arc<Edge> {
+        self.false_output.as_ref().unwrap()
+    }
+
+    /// ノードに変換
+    pub fn to_node(self, name: &'static str) -> Node {
+        Node::new(NodeType::If(self), name)
+    }
+}
+
 /// 最速ノード
 ///
 /// 複数の同じ型のエッジを受け取り、最も早く到着したデータを出力する。
@@ -59,6 +122,53 @@ impl FirstChoiceNode {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_if_node_new() {
+        let edge = Arc::new(Edge::new::<bool>());
+        let _ = IfNode::new(edge.clone()).unwrap();
+    }
+
+    #[test]
+    fn test_if_node_new_error() {
+        let edge = Arc::new(Edge::new::<i32>());
+        let node = IfNode::new(edge);
+        assert_eq!(node.err().unwrap(), NodeError::EdgeTypeMismatch);
+    }
+
+    #[test]
+    fn test_if_node_add_true_output() {
+        let edge = Arc::new(Edge::new::<bool>());
+        let mut node = IfNode::new(edge.clone()).unwrap();
+        let edge = node.add_true_output().unwrap();
+        assert_eq!(node.true_output.as_ref().unwrap(), &edge);
+    }
+
+    #[test]
+    fn test_if_node_add_true_output_error_exist() {
+        let edge = Arc::new(Edge::new::<bool>());
+        let mut node = IfNode::new(edge.clone()).unwrap();
+        let _ = node.add_true_output().unwrap();
+        let edge = node.add_true_output();
+        assert_eq!(edge.err().unwrap(), NodeError::OutputEdgeExists);
+    }
+
+    #[test]
+    fn test_if_node_add_false_output() {
+        let edge = Arc::new(Edge::new::<bool>());
+        let mut node = IfNode::new(edge.clone()).unwrap();
+        let edge = node.add_false_output().unwrap();
+        assert_eq!(node.false_output.as_ref().unwrap(), &edge);
+    }
+
+    #[test]
+    fn test_if_node_add_false_output_error_exist() {
+        let edge = Arc::new(Edge::new::<bool>());
+        let mut node = IfNode::new(edge.clone()).unwrap();
+        let _ = node.add_false_output().unwrap();
+        let edge = node.add_false_output();
+        assert_eq!(edge.err().unwrap(), NodeError::OutputEdgeExists);
+    }
 
     #[test]
     fn test_first_choice_node_new() {
