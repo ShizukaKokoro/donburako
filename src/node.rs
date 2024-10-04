@@ -84,15 +84,6 @@ impl Node {
         }
     }
 
-    /// 出力エッジの取得
-    pub(crate) fn outputs(&self) -> Vec<Arc<Edge>> {
-        match &self.kind {
-            NodeType::User(node) => node.outputs().clone(),
-            NodeType::If(node) => vec![node.true_output().clone(), node.false_output().clone()],
-            NodeType::FirstChoice(node) => vec![node.outputs().clone()],
-        }
-    }
-
     /// ノードの種類の取得
     pub(crate) fn kind(&self) -> &NodeType {
         &self.kind
