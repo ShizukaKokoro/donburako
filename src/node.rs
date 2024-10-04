@@ -82,18 +82,18 @@ impl Node {
     }
 
     /// 入力エッジの取得
-    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
+    pub fn inputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
-            NodeType::User(node) => node.inputs(),
-            NodeType::FirstChoice(node) => node.inputs(),
+            NodeType::User(node) => node.inputs().clone(),
+            NodeType::FirstChoice(node) => node.inputs().clone(),
         }
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> &Vec<Arc<Edge>> {
+    pub fn outputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
-            NodeType::User(node) => node.outputs(),
-            NodeType::FirstChoice(node) => todo!(),
+            NodeType::User(node) => node.outputs().clone(),
+            NodeType::FirstChoice(node) => vec![node.outputs().clone().unwrap()],
         }
     }
 
