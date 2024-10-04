@@ -224,7 +224,7 @@ impl Operator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::node::func::UserNode;
+    use crate::node::*;
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {

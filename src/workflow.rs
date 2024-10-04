@@ -122,7 +122,7 @@ impl Workflow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::func::UserNode;
+    use crate::node::*;
     use pretty_assertions::assert_eq;
 
     #[test]

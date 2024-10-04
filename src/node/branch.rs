@@ -49,17 +49,17 @@ impl IfNode {
     }
 
     /// 入力エッジの取得
-    pub fn input(&self) -> &Arc<Edge> {
+    pub(crate) fn input(&self) -> &Arc<Edge> {
         &self.input
     }
 
     /// 真の出力エッジの取得
-    pub fn true_output(&self) -> &Arc<Edge> {
+    pub(super) fn true_output(&self) -> &Arc<Edge> {
         self.true_output.as_ref().unwrap()
     }
 
     /// 偽の出力エッジの取得
-    pub fn false_output(&self) -> &Arc<Edge> {
+    pub(super) fn false_output(&self) -> &Arc<Edge> {
         self.false_output.as_ref().unwrap()
     }
 
@@ -119,12 +119,12 @@ impl FirstChoiceNode {
     }
 
     /// 入力エッジの取得
-    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
+    pub(crate) fn inputs(&self) -> &Vec<Arc<Edge>> {
         &self.inputs
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> &Arc<Edge> {
+    pub(super) fn outputs(&self) -> &Arc<Edge> {
         self.outputs.as_ref().unwrap()
     }
 

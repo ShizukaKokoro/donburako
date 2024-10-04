@@ -66,7 +66,7 @@ impl UserNode {
     }
 
     /// ブロッキングノードかどうか
-    pub fn is_blocking(&self) -> bool {
+    pub(super) fn is_blocking(&self) -> bool {
         self.is_blocking
     }
 

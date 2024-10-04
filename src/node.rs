@@ -6,13 +6,14 @@
 //! ノードは実行時に、コンテナが保存されている構造体を受け取り、その中のデータを読み書きすることになる。
 //! ノード同士の繋がりはエッジによって表される。
 
-pub mod branch;
+mod branch;
 pub mod edge;
-pub mod func;
+mod func;
 
-use self::branch::FirstChoiceNode;
+pub use self::branch::{FirstChoiceNode, IfNode};
+pub use self::func::UserNode;
+
 use self::edge::Edge;
-use self::func::UserNode;
 use crate::operator::{ExecutorId, Operator};
 use std::sync::Arc;
 use thiserror::Error;
@@ -32,7 +33,7 @@ pub enum NodeError {
 
 /// ノードID
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
-pub struct NodeId(Uuid);
+pub(crate) struct NodeId(Uuid);
 impl NodeId {
     /// ノードIDの生成
     pub fn new() -> Self {
@@ -51,7 +52,7 @@ pub struct Node {
 }
 impl Node {
     /// ノードの生成
-    pub fn new(kind: NodeType, name: &'static str) -> Self {
+    fn new(kind: NodeType, name: &'static str) -> Self {
         Node {
             id: NodeId::new(),
             kind,
@@ -66,7 +67,7 @@ impl Node {
     /// # Arguments
     ///
     /// * `op` - オペレーター
-    pub async fn run(&self, op: &Operator, exec_id: ExecutorId) {
+    pub(crate) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
         match &self.kind {
             NodeType::User(node) => node.run(op, exec_id).await,
             NodeType::If(node) => node.run(op, exec_id).await,
@@ -75,7 +76,7 @@ impl Node {
     }
 
     /// 入力エッジの取得
-    pub fn inputs(&self) -> Vec<Arc<Edge>> {
+    pub(crate) fn inputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.inputs().clone(),
             NodeType::If(node) => vec![node.input().clone()],
@@ -84,7 +85,7 @@ impl Node {
     }
 
     /// 出力エッジの取得
-    pub fn outputs(&self) -> Vec<Arc<Edge>> {
+    pub(crate) fn outputs(&self) -> Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.outputs().clone(),
             NodeType::If(node) => vec![node.true_output().clone(), node.false_output().clone()],
@@ -93,12 +94,12 @@ impl Node {
     }
 
     /// ノードの種類の取得
-    pub fn kind(&self) -> &NodeType {
+    pub(crate) fn kind(&self) -> &NodeType {
         &self.kind
     }
 
     /// ブロッキングノードかどうか
-    pub fn is_blocking(&self) -> bool {
+    pub(crate) fn is_blocking(&self) -> bool {
         match &self.kind {
             NodeType::User(node) => node.is_blocking(),
             NodeType::If(_) => false,
@@ -107,7 +108,7 @@ impl Node {
     }
 
     /// ノードの名前の取得
-    pub fn name(&self) -> &'static str {
+    pub(crate) fn name(&self) -> &'static str {
         self.name
     }
 }
@@ -125,7 +126,7 @@ impl std::hash::Hash for Node {
 
 /// ノードの種類
 #[derive(Debug)]
-pub enum NodeType {
+pub(crate) enum NodeType {
     /// ユーザー定義ノード
     User(UserNode),
     /// 分岐ノード

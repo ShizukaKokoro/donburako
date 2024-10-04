@@ -296,9 +296,7 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::branch::FirstChoiceNode;
-    use crate::node::edge::Edge;
-    use crate::node::func::UserNode;
+    use crate::node::*;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -490,11 +488,7 @@ mod tests {
         let mut map = ContainerMap::default();
         let edge = Arc::new(Edge::new::<bool>());
 
-        let node = Arc::new(
-            crate::node::branch::IfNode::new(edge.clone())
-                .unwrap()
-                .to_node("node"),
-        );
+        let node = Arc::new(IfNode::new(edge.clone()).unwrap().to_node("node"));
         assert!(!map.check_node_executable(&node, exec_id));
 
         map.add_new_container(edge.clone(), exec_id, true).unwrap();
