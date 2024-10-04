@@ -11,7 +11,20 @@ use std::any::TypeId;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use thiserror::Error;
 use uuid::Uuid;
+
+/// ノードエラー
+#[derive(Debug, Error, PartialEq)]
+pub enum NodeError {
+    /// すでに出力エッジが存在する
+    #[error("Output edge already exists")]
+    OutputEdgeExists,
+
+    /// エッジの型が一致しない
+    #[error("First choice node must have the same type in the input edges")]
+    EdgeTypeMismatch,
+}
 
 /// ノードID
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
@@ -183,6 +196,56 @@ impl std::fmt::Debug for UserNode {
     }
 }
 
+/// 最速ノード
+///
+/// 複数の同じ型のエッジを受け取り、最も早く到着したデータを出力する。
+#[derive(Debug)]
+pub struct FirstChoiceNode {
+    inputs: Vec<Arc<Edge>>,
+    outputs: Option<Arc<Edge>>,
+}
+impl FirstChoiceNode {
+    /// ノードの生成
+    pub fn new(inputs: Vec<Arc<Edge>>) -> Result<Self, NodeError> {
+        let ty = inputs[0].ty;
+        if inputs.iter().any(|edge| edge.ty != ty) {
+            return Err(NodeError::EdgeTypeMismatch);
+        }
+        Ok(FirstChoiceNode {
+            inputs,
+            outputs: None,
+        })
+    }
+
+    /// 出力エッジの追加
+    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Result<Arc<Edge>, NodeError> {
+        if self.outputs.is_some() {
+            return Err(NodeError::OutputEdgeExists);
+        }
+        if !self.inputs[0].check_type::<T>() {
+            return Err(NodeError::EdgeTypeMismatch);
+        }
+        let edge = Arc::new(Edge::new::<T>());
+        self.outputs = Some(edge.clone());
+        Ok(edge)
+    }
+
+    /// 入力エッジの取得
+    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
+        &self.inputs
+    }
+
+    /// 出力エッジの取得
+    pub fn outputs(&self) -> &Option<Arc<Edge>> {
+        &self.outputs
+    }
+
+    /// ノードに変換
+    pub fn to_node(self, name: &'static str) -> Node {
+        todo!()
+    }
+}
+
 /// エッジ
 ///
 /// ノード間を繋ぐデータの流れを表す。
@@ -232,5 +295,49 @@ mod tests {
         let node = UserNode::new_test(vec![]).to_node("node");
         let op = Operator::new(vec![]);
         node.run(&op, exec_id).await;
+    }
+
+    #[test]
+    fn test_first_choice_node_new() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        let node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
+        assert_eq!(node.inputs.len(), 2);
+    }
+
+    #[test]
+    fn test_first_choice_node_new_error() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<f32>());
+        let node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]);
+        assert_eq!(node.err().unwrap(), NodeError::EdgeTypeMismatch);
+    }
+
+    #[test]
+    fn test_first_choice_node_add_output() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
+        let edge = node.add_output::<i32>().unwrap();
+        assert_eq!(node.outputs.as_ref().unwrap(), &edge);
+    }
+
+    #[test]
+    fn test_first_choice_node_add_output_error_exist() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
+        let _ = node.add_output::<i32>().unwrap();
+        let edge = node.add_output::<i32>();
+        assert_eq!(edge.err().unwrap(), NodeError::OutputEdgeExists);
+    }
+
+    #[test]
+    fn test_first_choice_node_add_output_error_type() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
+        let edge = node.add_output::<f32>();
+        assert_eq!(edge.err().unwrap(), NodeError::EdgeTypeMismatch);
     }
 }
