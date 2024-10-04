@@ -31,19 +31,21 @@ pub enum ContainerError {
 
 /// キャンセルスタック
 #[derive(Default, Clone)]
-pub struct CancelStack(Vec<CancellationToken>);
+struct CancelStack(Vec<CancellationToken>);
 impl CancelStack {
     /// キャンセルトークンを追加する
     ///
     /// # Arguments
     ///
     /// * `token` - キャンセルトークン
-    pub fn push(&mut self, token: CancellationToken) {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    fn push(&mut self, token: CancellationToken) {
         self.0.push(token);
     }
 
     /// キャンセルを確認する
-    pub fn check(&mut self) -> bool {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    fn check(&mut self) -> bool {
         if let Some(token) = self.0.last() {
             if token.is_cancelled() {
                 let _ = self.0.pop();
@@ -54,7 +56,8 @@ impl CancelStack {
     }
 
     /// キャンセル
-    pub fn cancel(&mut self) {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    fn cancel(&mut self) {
         let token = self.0.pop();
         if let Some(token) = token {
             token.cancel();
@@ -137,17 +140,20 @@ impl Container {
     /// # Arguments
     ///
     /// * `token` - キャンセルトークン
-    pub fn push_cancel_token(&mut self, token: CancellationToken) {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    pub(crate) fn push_cancel_token(&mut self, token: CancellationToken) {
         self.stack.push(token);
     }
 
     /// キャンセルする
-    pub fn cancel(&mut self) {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    pub(crate) fn cancel(&mut self) {
         self.stack.cancel();
     }
 
     /// キャンセルを確認する
-    pub fn check_cancel(&mut self) -> bool {
+    #[allow(dead_code)] // TODO: イテレーターで使うために残している
+    pub(crate) fn check_cancel(&mut self) -> bool {
         self.stack.check()
     }
 }
@@ -188,7 +194,7 @@ impl ContainerMap {
     /// * `edge` - エッジ
     /// * `exec_id` - 実行ID
     /// * `data` - データ
-    pub fn add_new_container<T: 'static + Send + Sync>(
+    pub(crate) fn add_new_container<T: 'static + Send + Sync>(
         &mut self,
         edge: Arc<Edge>,
         exec_id: ExecutorId,
@@ -229,7 +235,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 実行可能な場合は true、そうでない場合は false
-    pub fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
+    pub(crate) fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
         match node.kind() {
             NodeType::User(node) => {
                 let mut result = true;
@@ -266,7 +272,11 @@ impl ContainerMap {
     /// # Returns
     ///
     /// コンテナ
-    pub fn get_container(&mut self, edge: Arc<Edge>, exec_id: ExecutorId) -> Option<Container> {
+    pub(crate) fn get_container(
+        &mut self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+    ) -> Option<Container> {
         self.0.remove(&(edge, exec_id))
     }
 
@@ -279,7 +289,7 @@ impl ContainerMap {
     /// * `edge` - エッジ
     /// * `exec_id` - 実行ID
     /// * `container` - コンテナ
-    pub fn add_container(
+    pub(crate) fn add_container(
         &mut self,
         edge: Arc<Edge>,
         exec_id: ExecutorId,
