@@ -2,7 +2,8 @@
 //!
 //! ワークフローはノードからなる有向グラフ。
 
-use crate::node::{Edge, Node};
+use crate::node::edge::Edge;
+use crate::node::Node;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
@@ -121,7 +122,7 @@ impl Workflow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::UserNode;
+    use crate::node::func::UserNode;
     use pretty_assertions::assert_eq;
 
     #[test]

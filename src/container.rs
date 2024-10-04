@@ -4,7 +4,8 @@
 //! 中に入っているデータの型は、決まっておらず、任意の型を格納し、任意の型を取り出すことができる。
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
-use crate::node::{Edge, Node, NodeType};
+use crate::node::edge::Edge;
+use crate::node::{Node, NodeType};
 use crate::operator::ExecutorId;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -291,7 +292,9 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{Edge, FirstChoiceNode, UserNode};
+    use crate::node::branch::FirstChoiceNode;
+    use crate::node::edge::Edge;
+    use crate::node::func::UserNode;
     use pretty_assertions::assert_eq;
 
     #[test]

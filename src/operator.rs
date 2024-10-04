@@ -1,7 +1,8 @@
 //! オペレーターモジュール
 
 use crate::container::{Container, ContainerError, ContainerMap};
-use crate::node::{Edge, Node};
+use crate::node::edge::Edge;
+use crate::node::Node;
 use crate::workflow::{Workflow, WorkflowBuilder};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -222,9 +223,8 @@ impl Operator {
 
 #[cfg(test)]
 mod test {
-    use crate::node::UserNode;
-
     use super::*;
+    use crate::node::func::UserNode;
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
