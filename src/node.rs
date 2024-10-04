@@ -68,6 +68,16 @@ impl Node {
                 let func = &node.func;
                 func(node, op, exec_id).await;
             }
+            NodeType::FirstChoice(node) => {
+                for edge in node.inputs() {
+                    let con = op.get_container(edge.clone(), exec_id).await;
+                    if con.is_some() {
+                        let con = con.unwrap();
+                        op.add_container(edge.clone(), exec_id, con).await.unwrap();
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -75,6 +85,7 @@ impl Node {
     pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.inputs(),
+            NodeType::FirstChoice(node) => node.inputs(),
         }
     }
 
@@ -82,6 +93,7 @@ impl Node {
     pub fn outputs(&self) -> &Vec<Arc<Edge>> {
         match &self.kind {
             NodeType::User(node) => node.outputs(),
+            NodeType::FirstChoice(node) => todo!(),
         }
     }
 
@@ -94,6 +106,7 @@ impl Node {
     pub fn is_blocking(&self) -> bool {
         match &self.kind {
             NodeType::User(node) => node.is_blocking(),
+            NodeType::FirstChoice(_) => false,
         }
     }
 
@@ -119,6 +132,8 @@ impl std::hash::Hash for Node {
 pub enum NodeType {
     /// ユーザー定義ノード
     User(UserNode),
+    /// 最速ノード
+    FirstChoice(FirstChoiceNode),
 }
 
 type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
@@ -242,7 +257,7 @@ impl FirstChoiceNode {
 
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
-        todo!()
+        Node::new(NodeType::FirstChoice(self), name)
     }
 }
 

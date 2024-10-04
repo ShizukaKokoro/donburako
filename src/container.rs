@@ -240,6 +240,14 @@ impl ContainerMap {
                 }
                 result
             }
+            NodeType::FirstChoice(node) => {
+                for edge in node.inputs() {
+                    if self.check_edge_exists(edge.clone(), exec_id) {
+                        return true;
+                    }
+                }
+                false
+            }
         }
     }
 
@@ -283,7 +291,7 @@ impl ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{Edge, UserNode};
+    use crate::node::{Edge, FirstChoiceNode, UserNode};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -466,6 +474,24 @@ mod tests {
         assert!(!map.check_node_executable(&node, exec_id));
 
         map.add_new_container(edge1.clone(), exec_id, "42").unwrap();
+        assert!(map.check_node_executable(&node, exec_id));
+    }
+
+    #[tokio::test]
+    async fn test_container_map_check_node_executable_first_choice() {
+        let exec_id = ExecutorId::new();
+        let mut map = ContainerMap::default();
+        let edge0 = Arc::new(Edge::new::<i32>());
+        let edge1 = Arc::new(Edge::new::<i32>());
+
+        let node = Arc::new(
+            FirstChoiceNode::new(vec![edge0.clone(), edge1.clone()])
+                .unwrap()
+                .to_node("node"),
+        );
+        assert!(!map.check_node_executable(&node, exec_id));
+
+        map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
         assert!(map.check_node_executable(&node, exec_id));
     }
 
