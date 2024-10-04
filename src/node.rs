@@ -68,37 +68,9 @@ impl Node {
     /// * `op` - オペレーター
     pub async fn run(&self, op: &Operator, exec_id: ExecutorId) {
         match &self.kind {
-            NodeType::User(node) => {
-                let func = &node.func;
-                func(node, op, exec_id).await;
-            }
-            NodeType::If(node) => {
-                let mut con = op
-                    .get_container(node.input().clone(), exec_id)
-                    .await
-                    .unwrap();
-                if con.take::<bool>().unwrap() {
-                    con.store(());
-                    op.add_container(node.true_output().clone(), exec_id, con)
-                        .await
-                        .unwrap();
-                } else {
-                    con.store(());
-                    op.add_container(node.false_output().clone(), exec_id, con)
-                        .await
-                        .unwrap();
-                }
-            }
-            NodeType::FirstChoice(node) => {
-                for edge in node.inputs() {
-                    let con = op.get_container(edge.clone(), exec_id).await;
-                    if con.is_some() {
-                        let con = con.unwrap();
-                        op.add_container(edge.clone(), exec_id, con).await.unwrap();
-                        break;
-                    }
-                }
-            }
+            NodeType::User(node) => node.run(op, exec_id).await,
+            NodeType::If(node) => node.run(op, exec_id).await,
+            NodeType::FirstChoice(node) => node.run(op, exec_id).await,
         }
     }
 

@@ -74,6 +74,10 @@ impl UserNode {
     pub fn to_node(self, name: &'static str) -> Node {
         Node::new(NodeType::User(self), name)
     }
+
+    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
+        (self.func)(self, op, exec_id).await;
+    }
 }
 impl std::fmt::Debug for UserNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

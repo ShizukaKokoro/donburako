@@ -67,6 +67,21 @@ impl IfNode {
     pub fn to_node(self, name: &'static str) -> Node {
         Node::new(NodeType::If(self), name)
     }
+
+    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
+        let mut con = op.get_container(self.input.clone(), exec_id).await.unwrap();
+        if con.take::<bool>().unwrap() {
+            con.store(());
+            op.add_container(self.true_output().clone(), exec_id, con)
+                .await
+                .unwrap();
+        } else {
+            con.store(());
+            op.add_container(self.false_output().clone(), exec_id, con)
+                .await
+                .unwrap();
+        }
+    }
 }
 
 /// 最速ノード
@@ -117,10 +132,25 @@ impl FirstChoiceNode {
     pub fn to_node(self, name: &'static str) -> Node {
         Node::new(NodeType::FirstChoice(self), name)
     }
+
+    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
+        for edge in self.inputs() {
+            let con = op.get_container(edge.clone(), exec_id).await;
+            if con.is_some() {
+                let con = con.unwrap();
+                op.add_container(self.outputs().clone(), exec_id, con)
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::workflow::WorkflowBuilder;
+
     use super::*;
 
     #[test]
@@ -170,6 +200,39 @@ mod test {
         assert_eq!(edge.err().unwrap(), NodeError::OutputEdgeExists);
     }
 
+    #[tokio::test]
+    async fn test_if_node_run() {
+        let edge_input = Arc::new(Edge::new::<bool>());
+        let mut node = IfNode::new(edge_input.clone()).unwrap();
+        let edge_true = node.add_true_output().unwrap();
+        let edge_false = node.add_false_output().unwrap();
+        let builder = WorkflowBuilder::default()
+            .add_node(Arc::new(node.to_node("node")))
+            .unwrap();
+        let op = Operator::new(vec![builder]);
+        let exec_id = ExecutorId::new();
+        op.start_workflow(exec_id, 0).await;
+
+        op.add_new_container(edge_input.clone(), exec_id, true)
+            .await
+            .unwrap();
+        let node = op.get_next_node().await.unwrap().0;
+        node.run(&op, exec_id).await;
+        assert!(op
+            .get_container(edge_false.clone(), exec_id)
+            .await
+            .is_none());
+        assert!(op.get_container(edge_true.clone(), exec_id).await.is_some());
+
+        op.add_new_container(edge_input.clone(), exec_id, false)
+            .await
+            .unwrap();
+        let node = op.get_next_node().await.unwrap().0;
+        node.run(&op, exec_id).await;
+        assert!(op.get_container(edge_true, exec_id).await.is_none());
+        assert!(op.get_container(edge_false, exec_id).await.is_some());
+    }
+
     #[test]
     fn test_first_choice_node_new() {
         let edge1 = Arc::new(Edge::new::<i32>());
@@ -212,5 +275,33 @@ mod test {
         let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
         let edge = node.add_output::<f32>();
         assert_eq!(edge.err().unwrap(), NodeError::EdgeTypeMismatch);
+    }
+
+    #[tokio::test]
+    async fn test_first_choice_node_run() {
+        let edge1 = Arc::new(Edge::new::<i32>());
+        let edge2 = Arc::new(Edge::new::<i32>());
+        let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
+        let edge = node.add_output::<i32>().unwrap();
+        let builder = WorkflowBuilder::default()
+            .add_node(Arc::new(node.to_node("node")))
+            .unwrap();
+        let op = Operator::new(vec![builder]);
+        let exec_id = ExecutorId::new();
+        op.start_workflow(exec_id, 0).await;
+
+        op.add_new_container(edge1.clone(), exec_id, 1)
+            .await
+            .unwrap();
+        let node = op.get_next_node().await.unwrap().0;
+        node.run(&op, exec_id).await;
+        assert!(op.get_container(edge.clone(), exec_id).await.is_some());
+
+        op.add_new_container(edge2.clone(), exec_id, 2)
+            .await
+            .unwrap();
+        let node = op.get_next_node().await.unwrap().0;
+        node.run(&op, exec_id).await;
+        assert!(op.get_container(edge, exec_id).await.is_some());
     }
 }
