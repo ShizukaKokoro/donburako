@@ -27,48 +27,109 @@ pub enum ContainerError {
     /// コンテナ内にデータが存在するのに複製しようとした
     #[error("Data is found in the container when cloning")]
     CloningWithData,
+
+    /// イテレーションの最大数を超えた
+    #[error("The iteration exceeds the maximum number")]
+    MaxIteration,
 }
 
-/// キャンセルスタック
-#[derive(Default, Clone)]
-struct CancelStack(Vec<CancellationToken>);
-impl CancelStack {
-    /// キャンセルトークンを追加する
+/// イテレータースタック
+#[derive(Default)]
+enum IterStack {
+    /// 空
+    #[default]
+    Empty,
+
+    /// データ
     ///
-    /// # Arguments
-    ///
-    /// * `token` - キャンセルトークン
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
-    fn push(&mut self, token: CancellationToken) {
-        self.0.push(token);
+    /// 0.0: イテレーターがキャンセルされたかどうか(キャンセルされた場合は true)
+    /// 0.1: イテレーターのインデックス
+    /// 0.2: イテレーターの全体の長さ(無限の場合は None)
+    /// 1: 後続
+    Con(
+        (CancellationToken, usize, Arc<Option<usize>>),
+        Arc<IterStack>,
+    ),
+}
+impl IterStack {
+    fn new() -> Self {
+        IterStack::Empty
     }
 
-    /// キャンセルを確認する
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
-    fn check(&mut self) -> bool {
-        if let Some(token) = self.0.last() {
-            if token.is_cancelled() {
-                let _ = self.0.pop();
-                return true;
+    fn push(self: &Arc<Self>, len: Option<usize>) -> Arc<Self> {
+        let cancel = CancellationToken::new();
+        Arc::new(IterStack::Con((cancel, 0, Arc::new(len)), self.clone()))
+    }
+
+    fn pop(self: &Arc<Self>) -> Option<Arc<Self>> {
+        match self.as_ref() {
+            IterStack::Empty => None,
+            IterStack::Con(_, next) => Some(next.clone()),
+        }
+    }
+
+    fn check(self: &Arc<Self>) -> bool {
+        match self.as_ref() {
+            IterStack::Empty => false,
+            IterStack::Con((cancelled, _, _), _) => cancelled.is_cancelled(),
+        }
+    }
+
+    fn cancel(self: &Arc<Self>) {
+        match self.as_ref() {
+            IterStack::Empty => (),
+            IterStack::Con((cancelled, _, _), _) => {
+                cancelled.cancel();
             }
         }
-        false
     }
 
-    /// キャンセル
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
-    fn cancel(&mut self) {
-        let token = self.0.pop();
-        if let Some(token) = token {
-            token.cancel();
+    fn clone_stack(self: &Arc<Self>) -> Option<Arc<Self>> {
+        match self.as_ref() {
+            IterStack::Empty => Some(Arc::new(IterStack::Empty)),
+            IterStack::Con((cancelled, index, len), next) => {
+                if let Some(length) = len.as_ref() {
+                    if *index < *length - 1 {
+                        Some(Arc::new(IterStack::Con(
+                            ((*cancelled).clone(), *index, len.clone()),
+                            next.clone(),
+                        )))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
         }
     }
 }
-impl std::fmt::Debug for CancelStack {
+impl std::fmt::Debug for IterStack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CancelStack")
-            .field("len", &self.0.len())
-            .finish()
+        match self {
+            IterStack::Empty => write!(f, "IterStack([])"),
+            IterStack::Con((cancelled, index, len), next) => {
+                let mut items = Vec::new();
+                items.push(((*cancelled).is_cancelled(), index, len));
+                let mut stack = next;
+                while let IterStack::Con((cancelled, index, len), next) = stack.as_ref() {
+                    items.push(((*cancelled).is_cancelled(), index, len));
+                    stack = next;
+                }
+                write!(f, "IterStack({:?})", items)
+            }
+        }
+    }
+}
+impl PartialEq for IterStack {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (IterStack::Empty, IterStack::Empty) => true,
+            (IterStack::Con((c0, i0, l0), n0), IterStack::Con((c1, i1, l1), n1)) => {
+                c0.is_cancelled() == c1.is_cancelled() && i0 == i1 && l0 == l1 && n0 == n1
+            }
+            _ => false,
+        }
     }
 }
 
@@ -79,7 +140,7 @@ impl std::fmt::Debug for CancelStack {
 pub struct Container {
     data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
-    stack: CancelStack,
+    stack: Arc<IterStack>,
 }
 impl Container {
     /// コンテナ内にデータが格納されているか確認する
@@ -135,26 +196,34 @@ impl Container {
         }
     }
 
-    /// キャンセルトークンを追加する
-    ///
-    /// # Arguments
-    ///
-    /// * `token` - キャンセルトークン
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
-    pub(crate) fn push_cancel_token(&mut self, token: CancellationToken) {
-        self.stack.push(token);
+    /// イテレーターの開始
+    pub(crate) fn start_iter(&mut self, len: Option<usize>) {
+        self.stack = self.stack.push(len);
     }
 
     /// キャンセルする
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
     pub(crate) fn cancel(&mut self) {
         self.stack.cancel();
     }
 
     /// キャンセルを確認する
-    #[allow(dead_code)] // TODO: イテレーターで使うために残している
     pub(crate) fn check_cancel(&mut self) -> bool {
-        self.stack.check()
+        if self.stack.check() {
+            self.stack = self.stack.pop().unwrap();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// イテレーターを進める
+    pub(crate) fn next_iter(&mut self) -> Result<(), ContainerError> {
+        if let Some(stack) = self.stack.clone_stack() {
+            self.stack = stack;
+            Ok(())
+        } else {
+            Err(ContainerError::MaxIteration)
+        }
     }
 }
 impl std::fmt::Debug for Container {
@@ -310,47 +379,45 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_cancel_stack_push() {
-        let mut stack = CancelStack::default();
-        stack.push(CancellationToken::new());
+    fn test_iter_stack_push() {
+        let stack = Arc::new(IterStack::default());
+        let stack = stack.push(None);
 
-        assert_eq!(stack.0.len(), 1);
+        match stack.as_ref() {
+            IterStack::Con((cancel, index, len), _) => {
+                assert!(!cancel.is_cancelled());
+                assert_eq!(*index, 0);
+                assert_eq!(*len.as_ref(), None);
+            }
+            _ => unreachable!(),
+        }
     }
 
     #[test]
-    fn test_cancel_stack_check() {
-        let mut stack = CancelStack::default();
-        stack.push(CancellationToken::new());
+    fn test_iter_stack_check() {
+        let stack = Arc::new(IterStack::default());
+        let stack = stack.push(None);
 
         assert!(!stack.check());
     }
 
     #[test]
-    fn test_cancel_stack_check_canceled() {
-        let mut stack = CancelStack::default();
-        let token = CancellationToken::new();
-        stack.push(token.clone());
-        token.cancel();
+    fn test_iter_stack_check_canceled() {
+        let stack = Arc::new(IterStack::default());
+        let stack0 = stack.push(None);
+        let stack1 = stack0.clone();
+        stack0.cancel();
 
-        assert!(stack.check());
-        assert_eq!(stack.0.len(), 0);
+        assert!(stack1.check());
+        assert_eq!(stack1.pop().unwrap().as_ref(), &IterStack::Empty);
     }
 
     #[test]
-    fn test_cancel_stack_cancel() {
-        let mut stack = CancelStack::default();
-        stack.push(CancellationToken::new());
+    fn test_iter_stack_cancel_empty() {
+        let stack = Arc::new(IterStack::default());
         stack.cancel();
 
-        assert_eq!(stack.0.len(), 0);
-    }
-
-    #[test]
-    fn test_cancel_stack_cancel_empty() {
-        let mut stack = CancelStack::default();
-        stack.cancel();
-
-        assert_eq!(stack.0.len(), 0);
+        assert_eq!(stack.as_ref(), &IterStack::Empty);
     }
 
     #[test]
@@ -431,28 +498,12 @@ mod tests {
         let debug = format!("{:?}", container);
         assert_eq!(
             debug,
-            "Container { data: Some(Any { .. }), stack: CancelStack { len: 0 } }"
+            "Container { data: Some(Any { .. }), stack: IterStack([]) }"
         );
 
         let container = Container::default();
         let debug = format!("{:?}", container);
-        assert_eq!(
-            debug,
-            "Container { data: None, stack: CancelStack { len: 0 } }"
-        );
-    }
-
-    #[test]
-    fn test_container_cancel() {
-        let mut con0 = Container::default();
-        con0.push_cancel_token(CancellationToken::new());
-        let mut con1 = con0.clone_container().unwrap();
-        assert_eq!(con1.stack.0.len(), 1);
-        assert!(!con1.check_cancel());
-        con0.cancel();
-        assert_eq!(con0.stack.0.len(), 0);
-        assert_eq!(con1.stack.0.len(), 1);
-        assert!(con1.check_cancel());
+        assert_eq!(debug, "Container { data: None, stack: IterStack([]) }");
     }
 
     #[tokio::test]
