@@ -97,7 +97,7 @@ impl Workflow {
     /// # Arguments
     ///
     /// * `edge` - エッジ
-    pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Arc<Node>> {
+    pub(crate) fn get_node(&self, edge: &Arc<Edge>) -> Option<Arc<Node>> {
         self.input_to_node.get(edge).cloned()
     }
 

@@ -122,7 +122,7 @@ impl Drop for Container {
 /// 次に向かうべきエッジをキーにして、コンテナを格納する。
 /// 外部からはエッジを参照して、コンテナを取り出すことができる。
 #[derive(Default, Debug)]
-pub struct ContainerMap(HashMap<ExecutorId, HashMap<Arc<Edge>, Container>>);
+pub(crate) struct ContainerMap(HashMap<ExecutorId, HashMap<Arc<Edge>, Container>>);
 impl ContainerMap {
     /// 新しいコンテナの追加
     ///

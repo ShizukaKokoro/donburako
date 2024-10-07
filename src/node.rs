@@ -38,7 +38,7 @@ pub enum NodeError {
 pub(crate) struct NodeId(Uuid);
 impl NodeId {
     /// ノードIDの生成
-    pub fn new() -> Self {
+    fn new() -> Self {
         NodeId(Uuid::new_v4())
     }
 }
