@@ -23,7 +23,7 @@ type AsyncFn =
 pub struct UserNode {
     inputs: Vec<Arc<Edge>>,
     outputs: Vec<Arc<Edge>>,
-    pub(super) func: Box<AsyncFn>,
+    func: Box<AsyncFn>,
     is_blocking: bool,
 }
 impl UserNode {
