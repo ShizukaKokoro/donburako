@@ -9,6 +9,7 @@
 mod branch;
 pub mod edge;
 mod func;
+mod iter;
 mod rec;
 
 pub use self::branch::{FirstChoiceNode, IfNode};
