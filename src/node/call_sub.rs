@@ -71,6 +71,7 @@ impl RecursiveNode {
                 .await
                 .unwrap();
         }
+        op.finish_containers(id).await;
     }
 }
 
