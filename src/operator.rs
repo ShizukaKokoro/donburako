@@ -266,6 +266,16 @@ impl Operator {
     pub(crate) async fn has_executable_node(&self) -> bool {
         !self.queue.lock().await.queue.is_empty()
     }
+
+    /// 実行IDからワークフローIDを取得
+    pub(crate) async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<usize> {
+        let exec = self.executors.lock().await;
+        let state = exec.get(&exec_id)?;
+        match state {
+            State::Running(index) => Some(*index),
+            State::Finished(index) => Some(*index),
+        }
+    }
 }
 
 #[cfg(test)]
