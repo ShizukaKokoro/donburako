@@ -7,7 +7,7 @@ use crate::workflow::{Workflow, WorkflowBuilder};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -102,9 +102,12 @@ impl Operator {
         edge: &Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Result<(), OperatorError> {
-        let exec = self.executors.lock().await;
-        let index = if let Some(State::Running(index)) = exec.get(&exec_id) {
-            *index
+        let mut exec = self.executors.lock().await;
+        let index = if let Some(state) = exec.get(&exec_id) {
+            match state {
+                State::Running(index) => *index,
+                State::Finished(index) => *index,
+            }
         } else {
             return Err(OperatorError::NotStarted);
         };
@@ -112,8 +115,37 @@ impl Operator {
             if self.check_node_executable(&node, exec_id).await {
                 self.queue.lock().await.push(node, exec_id);
             }
+        } else {
+            println!("Check finish");
+            self.check_finish(exec_id, &mut exec).await;
         }
         Ok(())
+    }
+
+    async fn check_finish(
+        &self,
+        exec_id: ExecutorId,
+        exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
+    ) {
+        if let Some(State::Running(index)) = exec.get(&exec_id) {
+            let index = *index;
+            for end in self.workflows[index].end_edges() {
+                if !self
+                    .containers
+                    .lock()
+                    .await
+                    .check_edge_exists(end.clone(), exec_id)
+                {
+                    return;
+                }
+            }
+            let _ = exec.insert(exec_id, State::Finished(index));
+        }
+    }
+
+    pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
+        let exec = self.executors.lock().await;
+        matches!(exec.get(&exec_id), Some(State::Finished(_)))
     }
 
     /// 新しいコンテナの追加
@@ -215,13 +247,8 @@ impl Operator {
     ///
     /// NOTE: 終了処理は未実装
     pub(crate) async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
-        while let Some(State::Running(index)) = self.executors.lock().await.get(&exec_id) {
+        while let Some(State::Running(_)) = self.executors.lock().await.get(&exec_id) {
             tokio::time::sleep(tokio::time::Duration::from_millis(duration)).await;
-            let _ = self
-                .executors
-                .lock()
-                .await
-                .insert(exec_id, State::Finished(*index));
         }
     }
 

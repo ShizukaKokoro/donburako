@@ -157,7 +157,7 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 存在する場合は true、そうでない場合は false
-    fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
+    pub(crate) fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
         self.0.contains_key(&(edge, exec_id))
     }
 

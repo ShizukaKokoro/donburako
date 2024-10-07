@@ -9,6 +9,7 @@ use std::sync::Arc;
 /// 分岐ノード
 ///
 /// 真偽値を受け取り、真の場合と偽の場合にそれぞれ異なるエッジにユニット型のデータを送る。
+/// 分岐ノードで終わるワークフローは、終了確認ができないため、必ず統合ノードを追加する必要がある。
 #[derive(Debug)]
 pub struct IfNode {
     input: Arc<Edge>,
@@ -303,5 +304,6 @@ mod test {
         let node = op.get_next_node().await.unwrap().0;
         node.run(&op, exec_id).await;
         assert!(op.get_container(edge, exec_id).await.is_some());
+        assert!(op.is_finished(exec_id).await);
     }
 }
