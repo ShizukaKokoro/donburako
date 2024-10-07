@@ -304,14 +304,11 @@ mod tests {
         container.store(42);
 
         let debug = format!("{:?}", container);
-        assert_eq!(
-            debug,
-            "Container { data: Some(DataUnit::Any), stack: IterStack([]) }"
-        );
+        assert_eq!(debug, "Container { data: Some(Any { .. }) }");
 
         let container = Container::default();
         let debug = format!("{:?}", container);
-        assert_eq!(debug, "Container { data: None, stack: IterStack([]) }");
+        assert_eq!(debug, "Container { data: None }");
     }
 
     #[tokio::test]
