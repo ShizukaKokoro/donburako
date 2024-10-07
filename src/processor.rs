@@ -98,8 +98,8 @@ impl ProcessorBuilder {
         wfs.push(wf);
         Self {
             workflow: wfs,
-            check_time: Duration::from_millis(10),
-            loop_wait_time: Duration::from_millis(1),
+            check_time: Duration::from_micros(10),
+            loop_wait_time: Duration::from_micros(1),
         }
     }
 
@@ -108,9 +108,9 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `time` - チェック時間
-    pub fn set_check_time_millis(self, time: u64) -> Self {
+    pub fn set_check_time_micros(self, time: u64) -> Self {
         Self {
-            check_time: Duration::from_millis(time),
+            check_time: Duration::from_micros(time),
             ..self
         }
     }
@@ -120,9 +120,9 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `time` - ループ待機時間
-    pub fn set_loop_wait_time_millis(self, time: u64) -> Self {
+    pub fn set_loop_wait_time_micros(self, time: u64) -> Self {
         Self {
-            loop_wait_time: Duration::from_millis(time),
+            loop_wait_time: Duration::from_micros(time),
             ..self
         }
     }
