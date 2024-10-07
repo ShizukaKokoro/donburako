@@ -143,6 +143,7 @@ impl Operator {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         let exec = self.executors.lock().await;
         matches!(exec.get(&exec_id), Some(State::Finished(_)))
@@ -247,7 +248,13 @@ impl Operator {
     ///
     /// NOTE: 終了処理は未実装
     pub(crate) async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
-        while let Some(State::Running(_)) = self.executors.lock().await.get(&exec_id) {
+        loop {
+            let exec = self.executors.lock().await;
+            if let Some(State::Running(_)) = exec.get(&exec_id) {
+            } else {
+                break;
+            }
+            drop(exec);
             tokio::time::sleep(tokio::time::Duration::from_millis(duration)).await;
         }
     }
@@ -308,5 +315,45 @@ mod test {
         op.enqueue_node_if_executable(&edge, exec_id).await.unwrap();
         let next = op.get_next_node().await.unwrap();
         assert_eq!(next, (node, exec_id));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_wait_finish() {
+        let edge = Arc::new(Edge::new::<&str>());
+        let mut node = UserNode::new(
+            vec![edge.clone()],
+            Box::new(|self_, op, exec_id| {
+                Box::pin(async move {
+                    let mut con = op
+                        .get_container(self_.inputs()[0].clone(), exec_id)
+                        .await
+                        .unwrap();
+                    let _: &str = con.take().unwrap();
+                    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                    let mut con_clone = con.clone_container().unwrap();
+                    con_clone.store("test");
+                    op.add_container(self_.outputs()[0].clone(), exec_id, con_clone)
+                        .await
+                        .unwrap();
+                })
+            }),
+            false,
+        );
+        let edge_to = node.add_output::<&str>();
+        let builder = WorkflowBuilder::default()
+            .add_node(Arc::new(node.to_node("node")))
+            .unwrap();
+        let op = Operator::new(vec![builder]);
+        let exec_id = ExecutorId::new();
+        op.start_workflow(exec_id, 0).await;
+        op.add_new_container(edge, exec_id, "test").await.unwrap();
+        let node = op.get_next_node().await.unwrap().0;
+        let f = node.run(&op, exec_id);
+        assert!(!op.is_finished(exec_id).await);
+        assert!(op.get_container(edge_to.clone(), exec_id).await.is_none());
+        f.await;
+        op.wait_finish(exec_id, 10).await;
+        assert!(op.get_container(edge_to, exec_id).await.is_some());
+        assert!(op.is_finished(exec_id).await);
     }
 }
