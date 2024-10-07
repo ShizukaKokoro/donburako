@@ -211,7 +211,19 @@ impl Operator {
             .insert(exec_id, State::Running(index));
     }
 
-    // TODO: ワークフローが終了したか確認するメソッドを実装する
+    /// ワークフローの実行終了の待機
+    ///
+    /// NOTE: 終了処理は未実装
+    pub(crate) async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
+        while let Some(State::Running(index)) = self.executors.lock().await.get(&exec_id) {
+            tokio::time::sleep(tokio::time::Duration::from_millis(duration)).await;
+            let _ = self
+                .executors
+                .lock()
+                .await
+                .insert(exec_id, State::Finished(*index));
+        }
+    }
 
     /// 次に実行するノードを取得する
     pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
