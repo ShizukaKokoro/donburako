@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
+use tracing_subscriber::registry::Data;
 
 /// コンテナエラー
 #[derive(Debug, Error, PartialEq)]
@@ -133,12 +134,43 @@ impl PartialEq for IterStack {
     }
 }
 
+/// データの列挙型
+pub enum DataUnit {
+    /// ユニット型
+    ///
+    /// データではなく、制御のためのデータ。
+    /// この型のデータをやりとりすることで、処理の順番を制御する。
+    Unit,
+
+    /// 汎用型
+    ///
+    /// 任意の型のデータを格納する。
+    Any(Box<dyn Any + 'static + Send + Sync>),
+}
+impl DataUnit {
+    /// 汎用型に変換する
+    pub fn to_any(self) -> Option<DataUnit> {
+        match self {
+            DataUnit::Unit => Some(DataUnit::Any(Box::new(()))),
+            DataUnit::Any(data) => Some(DataUnit::Any(data)),
+        }
+    }
+}
+impl std::fmt::Debug for DataUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataUnit::Unit => write!(f, "DataUnit::Unit"),
+            DataUnit::Any(_) => write!(f, "DataUnit::Any"),
+        }
+    }
+}
+
 /// コンテナ
 ///
 /// データを格納するためのコンテナ。
 #[derive(Default)]
 pub struct Container {
-    data: Option<Box<dyn Any + 'static + Send + Sync>>,
+    data: Option<DataUnit>,
     ty: Option<TypeId>,
     stack: Arc<IterStack>,
 }
@@ -158,7 +190,7 @@ impl Container {
     ///
     /// * `data` - 格納するデータ
     pub fn store<T: 'static + Send + Sync>(&mut self, data: T) {
-        self.data = Some(Box::new(data));
+        self.data = Some(DataUnit::Any(Box::new(data)));
         self.ty = Some(TypeId::of::<T>());
     }
 
@@ -168,7 +200,7 @@ impl Container {
     ///
     /// 格納されているデータ
     pub fn take<T: 'static + Send + Sync>(&mut self) -> Result<T, ContainerError> {
-        if let Some(data) = self.data.take() {
+        if let Some(DataUnit::Any(data)) = self.data.take() {
             if let Some(ty) = self.ty {
                 if ty == TypeId::of::<T>() {
                     if let Ok(data) = data.downcast::<T>() {
@@ -498,7 +530,7 @@ mod tests {
         let debug = format!("{:?}", container);
         assert_eq!(
             debug,
-            "Container { data: Some(Any { .. }), stack: IterStack([]) }"
+            "Container { data: Some(DataUnit::Any), stack: IterStack([]) }"
         );
 
         let container = Container::default();
