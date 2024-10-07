@@ -11,8 +11,6 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio_util::sync::CancellationToken;
-use tracing_subscriber::registry::Data;
 
 /// コンテナエラー
 #[derive(Debug, Error, PartialEq)]
@@ -34,145 +32,13 @@ pub enum ContainerError {
     MaxIteration,
 }
 
-/// イテレータースタック
-#[derive(Default)]
-enum IterStack {
-    /// 空
-    #[default]
-    Empty,
-
-    /// データ
-    ///
-    /// 0.0: イテレーターがキャンセルされたかどうか(キャンセルされた場合は true)
-    /// 0.1: イテレーターのインデックス
-    /// 0.2: イテレーターの全体の長さ(無限の場合は None)
-    /// 1: 後続
-    Con(
-        (CancellationToken, usize, Arc<Option<usize>>),
-        Arc<IterStack>,
-    ),
-}
-impl IterStack {
-    fn new() -> Self {
-        IterStack::Empty
-    }
-
-    fn push(self: &Arc<Self>, len: Option<usize>) -> Arc<Self> {
-        let cancel = CancellationToken::new();
-        Arc::new(IterStack::Con((cancel, 0, Arc::new(len)), self.clone()))
-    }
-
-    fn pop(self: &Arc<Self>) -> Option<Arc<Self>> {
-        match self.as_ref() {
-            IterStack::Empty => None,
-            IterStack::Con(_, next) => Some(next.clone()),
-        }
-    }
-
-    fn check(self: &Arc<Self>) -> bool {
-        match self.as_ref() {
-            IterStack::Empty => false,
-            IterStack::Con((cancelled, _, _), _) => cancelled.is_cancelled(),
-        }
-    }
-
-    fn cancel(self: &Arc<Self>) {
-        match self.as_ref() {
-            IterStack::Empty => (),
-            IterStack::Con((cancelled, _, _), _) => {
-                cancelled.cancel();
-            }
-        }
-    }
-
-    fn clone_stack(self: &Arc<Self>) -> Option<Arc<Self>> {
-        match self.as_ref() {
-            IterStack::Empty => Some(Arc::new(IterStack::Empty)),
-            IterStack::Con((cancelled, index, len), next) => {
-                if let Some(length) = len.as_ref() {
-                    if *index < *length - 1 {
-                        Some(Arc::new(IterStack::Con(
-                            ((*cancelled).clone(), *index, len.clone()),
-                            next.clone(),
-                        )))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}
-impl std::fmt::Debug for IterStack {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IterStack::Empty => write!(f, "IterStack([])"),
-            IterStack::Con((cancelled, index, len), next) => {
-                let mut items = Vec::new();
-                items.push(((*cancelled).is_cancelled(), index, len));
-                let mut stack = next;
-                while let IterStack::Con((cancelled, index, len), next) = stack.as_ref() {
-                    items.push(((*cancelled).is_cancelled(), index, len));
-                    stack = next;
-                }
-                write!(f, "IterStack({:?})", items)
-            }
-        }
-    }
-}
-impl PartialEq for IterStack {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (IterStack::Empty, IterStack::Empty) => true,
-            (IterStack::Con((c0, i0, l0), n0), IterStack::Con((c1, i1, l1), n1)) => {
-                c0.is_cancelled() == c1.is_cancelled() && i0 == i1 && l0 == l1 && n0 == n1
-            }
-            _ => false,
-        }
-    }
-}
-
-/// データの列挙型
-pub enum DataUnit {
-    /// ユニット型
-    ///
-    /// データではなく、制御のためのデータ。
-    /// この型のデータをやりとりすることで、処理の順番を制御する。
-    Unit,
-
-    /// 汎用型
-    ///
-    /// 任意の型のデータを格納する。
-    Any(Box<dyn Any + 'static + Send + Sync>),
-}
-impl DataUnit {
-    /// 汎用型に変換する
-    pub fn to_any(self) -> Option<DataUnit> {
-        match self {
-            DataUnit::Unit => Some(DataUnit::Any(Box::new(()))),
-            DataUnit::Any(data) => Some(DataUnit::Any(data)),
-        }
-    }
-}
-impl std::fmt::Debug for DataUnit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DataUnit::Unit => write!(f, "DataUnit::Unit"),
-            DataUnit::Any(_) => write!(f, "DataUnit::Any"),
-        }
-    }
-}
-
 /// コンテナ
 ///
 /// データを格納するためのコンテナ。
 #[derive(Default)]
 pub struct Container {
-    data: Option<DataUnit>,
+    data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
-    stack: Arc<IterStack>,
 }
 impl Container {
     /// コンテナ内にデータが格納されているか確認する
@@ -190,7 +56,7 @@ impl Container {
     ///
     /// * `data` - 格納するデータ
     pub fn store<T: 'static + Send + Sync>(&mut self, data: T) {
-        self.data = Some(DataUnit::Any(Box::new(data)));
+        self.data = Some(Box::new(data));
         self.ty = Some(TypeId::of::<T>());
     }
 
@@ -200,7 +66,7 @@ impl Container {
     ///
     /// 格納されているデータ
     pub fn take<T: 'static + Send + Sync>(&mut self) -> Result<T, ContainerError> {
-        if let Some(DataUnit::Any(data)) = self.data.take() {
+        if let Some(data) = self.data.take() {
             if let Some(ty) = self.ty {
                 if ty == TypeId::of::<T>() {
                     if let Ok(data) = data.downcast::<T>() {
@@ -223,38 +89,7 @@ impl Container {
             Ok(Self {
                 data: None,
                 ty: None,
-                stack: self.stack.clone(),
             })
-        }
-    }
-
-    /// イテレーターの開始
-    pub(crate) fn start_iter(&mut self, len: Option<usize>) {
-        self.stack = self.stack.push(len);
-    }
-
-    /// キャンセルする
-    pub(crate) fn cancel(&mut self) {
-        self.stack.cancel();
-    }
-
-    /// キャンセルを確認する
-    pub(crate) fn check_cancel(&mut self) -> bool {
-        if self.stack.check() {
-            self.stack = self.stack.pop().unwrap();
-            true
-        } else {
-            false
-        }
-    }
-
-    /// イテレーターを進める
-    pub(crate) fn next_iter(&mut self) -> Result<(), ContainerError> {
-        if let Some(stack) = self.stack.clone_stack() {
-            self.stack = stack;
-            Ok(())
-        } else {
-            Err(ContainerError::MaxIteration)
         }
     }
 }
@@ -262,7 +97,6 @@ impl std::fmt::Debug for Container {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Container")
             .field("data", &self.data)
-            .field("stack", &self.stack)
             .finish()
     }
 }
@@ -280,9 +114,6 @@ impl Drop for Container {
 /// コンテナを管理するためのマップ。
 /// 次に向かうべきエッジをキーにして、コンテナを格納する。
 /// 外部からはエッジを参照して、コンテナを取り出すことができる。
-///
-/// 内部に状態をもつため、実行順に影響を受ける。
-/// TODO: イテレーション番号に対応する
 #[derive(Default, Debug)]
 pub struct ContainerMap(HashMap<(Arc<Edge>, ExecutorId), Container>);
 impl ContainerMap {
@@ -411,48 +242,6 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_iter_stack_push() {
-        let stack = Arc::new(IterStack::default());
-        let stack = stack.push(None);
-
-        match stack.as_ref() {
-            IterStack::Con((cancel, index, len), _) => {
-                assert!(!cancel.is_cancelled());
-                assert_eq!(*index, 0);
-                assert_eq!(*len.as_ref(), None);
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    #[test]
-    fn test_iter_stack_check() {
-        let stack = Arc::new(IterStack::default());
-        let stack = stack.push(None);
-
-        assert!(!stack.check());
-    }
-
-    #[test]
-    fn test_iter_stack_check_canceled() {
-        let stack = Arc::new(IterStack::default());
-        let stack0 = stack.push(None);
-        let stack1 = stack0.clone();
-        stack0.cancel();
-
-        assert!(stack1.check());
-        assert_eq!(stack1.pop().unwrap().as_ref(), &IterStack::Empty);
-    }
-
-    #[test]
-    fn test_iter_stack_cancel_empty() {
-        let stack = Arc::new(IterStack::default());
-        stack.cancel();
-
-        assert_eq!(stack.as_ref(), &IterStack::Empty);
-    }
-
-    #[test]
     fn test_container_init() {
         let container = Container::default();
 
@@ -507,19 +296,6 @@ mod tests {
         let result = container.take::<i32>();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ContainerError::DataNotFound);
-    }
-
-    #[test]
-    fn test_container_clone_container() {
-        let mut container = Container::default();
-        let result = container.clone_container();
-        assert!(result.is_ok());
-
-        container.store(42);
-
-        let result = container.clone_container();
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), ContainerError::CloningWithData);
     }
 
     #[test]
