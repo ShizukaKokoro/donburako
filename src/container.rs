@@ -92,6 +92,12 @@ impl Container {
             })
         }
     }
+
+    /// データの移行
+    pub fn migrate(&mut self, from: &mut Self) {
+        self.data = from.data.take();
+        self.ty = from.ty.take();
+    }
 }
 impl std::fmt::Debug for Container {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
