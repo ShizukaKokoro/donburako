@@ -245,8 +245,6 @@ impl Operator {
     }
 
     /// ワークフローの実行終了の待機
-    ///
-    /// NOTE: 終了処理は未実装
     pub(crate) async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
         loop {
             let exec = self.executors.lock().await;
