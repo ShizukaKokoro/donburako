@@ -7,6 +7,7 @@ use crate::node::Node;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
+use uuid::Uuid;
 
 /// ワークフローエラー
 #[derive(Debug, Error, PartialEq)]
@@ -20,9 +21,14 @@ pub enum WorkflowError {
     InvalidEdge,
 }
 
+/// ワークフローID
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct WorkflowId(Uuid);
+
 /// ワークフロービルダー
 #[derive(Default)]
 pub struct WorkflowBuilder {
+    id: WorkflowId,
     nodes: Vec<Arc<Node>>,
 }
 impl WorkflowBuilder {
@@ -33,11 +39,16 @@ impl WorkflowBuilder {
             return Err(WorkflowError::NodeIsAlreadyAdded);
         }
         nodes.push(node);
-        Ok(Self { nodes })
+        Ok(Self { nodes, ..self })
+    }
+
+    /// ワークフローIDの取得
+    pub fn id(&self) -> WorkflowId {
+        self.id
     }
 
     /// ワークフローの生成
-    pub(crate) fn build(self) -> Workflow {
+    pub(crate) fn build(self) -> (Workflow, WorkflowId) {
         let mut input_to_node = HashMap::new();
         let mut all_edges = HashSet::new();
         let mut input_edges = HashSet::new();
@@ -57,11 +68,14 @@ impl WorkflowBuilder {
 
         let start_edges = all_edges.difference(&output_edges).cloned().collect();
         let end_edges = all_edges.difference(&input_edges).cloned().collect();
-        Workflow {
-            input_to_node,
-            start_edges,
-            end_edges,
-        }
+        (
+            Workflow {
+                input_to_node,
+                start_edges,
+                end_edges,
+            },
+            self.id,
+        )
     }
 }
 
@@ -110,7 +124,8 @@ mod tests {
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
-            .build();
+            .build()
+            .0;
         assert_eq!(wf.input_to_node.len(), 0);
     }
 
@@ -134,7 +149,8 @@ mod tests {
             .unwrap()
             .add_node(Arc::new(node1.to_node("node1")))
             .unwrap()
-            .build();
+            .build()
+            .0;
         assert_eq!(wf.input_to_node.len(), 1);
     }
 
@@ -146,7 +162,8 @@ mod tests {
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
-            .build();
+            .build()
+            .0;
         let node = wf.get_node(&edge).unwrap();
         assert_eq!(node, node0_rc);
     }

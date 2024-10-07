@@ -53,7 +53,7 @@ impl RecursiveNode {
     /// ノードの実行
     pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
         let wf_id = op.get_workflow_id(exec_id).await.unwrap();
-        let (start, end) = op.get_start_end_edges(wf_id).await;
+        let (start, end) = op.get_start_end_edges(&wf_id).await;
         let id = ExecutorId::new();
         debug!("start workflow: {:?}({:?}) in {:?}", wf_id, id, exec_id);
         op.start_workflow(id, wf_id).await;

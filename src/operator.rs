@@ -3,7 +3,7 @@
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::node::edge::Edge;
 use crate::node::Node;
-use crate::workflow::{Workflow, WorkflowBuilder};
+use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
@@ -61,10 +61,10 @@ impl ExecutableQueue {
 #[derive(Debug, PartialEq, Eq)]
 enum State {
     /// 実行中
-    Running(usize),
+    Running(WorkflowId),
     /// 終了
     #[allow(dead_code)] // TODO: 終了状態を実装したら削除する
-    Finished(usize),
+    Finished(WorkflowId),
 }
 
 /// オペレーター
@@ -72,7 +72,7 @@ enum State {
 /// コンテナと実行IDごとのワークフローの状態を管理する。
 #[derive(Debug, Clone)]
 pub struct Operator {
-    workflows: Arc<Vec<Workflow>>,
+    workflows: Arc<HashMap<WorkflowId, Workflow>>,
     containers: Arc<Mutex<ContainerMap>>,
     executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
     queue: Arc<Mutex<ExecutableQueue>>,
@@ -84,10 +84,11 @@ impl Operator {
     ///
     /// * `builders` - ワークフロービルダーのリスト
     pub(crate) fn new(builders: Vec<WorkflowBuilder>) -> Self {
-        let workflows = builders
-            .into_iter()
-            .map(|builder| builder.build())
-            .collect();
+        let mut workflows = HashMap::new();
+        for builder in builders {
+            let (workflow, id) = builder.build();
+            let _ = workflows.insert(id, workflow);
+        }
         Self {
             workflows: Arc::new(workflows),
             containers: Arc::new(Mutex::new(ContainerMap::default())),
@@ -103,15 +104,15 @@ impl Operator {
         exec_id: ExecutorId,
     ) -> Result<(), OperatorError> {
         let mut exec = self.executors.lock().await;
-        let index = if let Some(state) = exec.get(&exec_id) {
+        let wf_id = if let Some(state) = exec.get(&exec_id) {
             match state {
-                State::Running(index) => *index,
-                State::Finished(index) => *index,
+                State::Running(wf_id) => wf_id,
+                State::Finished(wf_id) => wf_id,
             }
         } else {
             return Err(OperatorError::NotStarted);
         };
-        if let Some(node) = self.workflows[index].get_node(edge) {
+        if let Some(node) = self.workflows[wf_id].get_node(edge) {
             if self.check_node_executable(&node, exec_id).await {
                 self.queue.lock().await.push(node, exec_id);
             }
@@ -126,9 +127,8 @@ impl Operator {
         exec_id: ExecutorId,
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
     ) {
-        if let Some(State::Running(index)) = exec.get(&exec_id) {
-            let index = *index;
-            for end in self.workflows[index].end_edges() {
+        let wf_id = if let Some(State::Running(wf_id)) = exec.get(&exec_id) {
+            for end in self.workflows[wf_id].end_edges() {
                 if !self
                     .containers
                     .lock()
@@ -138,8 +138,11 @@ impl Operator {
                     return;
                 }
             }
-            let _ = exec.insert(exec_id, State::Finished(index));
-        }
+            *wf_id
+        } else {
+            return;
+        };
+        let _ = exec.insert(exec_id, State::Finished(wf_id));
     }
 
     #[cfg(test)]
@@ -234,13 +237,13 @@ impl Operator {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
-    /// * `index` - ワークフローのインデックス
-    pub(crate) async fn start_workflow(&self, exec_id: ExecutorId, index: usize) {
+    /// * `wf_id` - ワークフローのインデックス
+    pub(crate) async fn start_workflow(&self, exec_id: ExecutorId, wf_id: WorkflowId) {
         let _ = self
             .executors
             .lock()
             .await
-            .insert(exec_id, State::Running(index));
+            .insert(exec_id, State::Running(wf_id));
     }
 
     /// ワークフローの実行終了の待機
@@ -267,21 +270,21 @@ impl Operator {
     }
 
     /// 実行IDからワークフローIDを取得
-    pub(crate) async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<usize> {
+    pub(crate) async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
         let exec = self.executors.lock().await;
         let state = exec.get(&exec_id)?;
         match state {
-            State::Running(index) => Some(*index),
-            State::Finished(index) => Some(*index),
+            State::Running(wf_id) => Some(*wf_id),
+            State::Finished(wf_id) => Some(*wf_id),
         }
     }
 
     /// ワークフローIDから始点と終点のエッジを取得
     pub(crate) async fn get_start_end_edges(
         &self,
-        index: usize,
+        wf_id: &WorkflowId,
     ) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
-        let wf = &self.workflows[index];
+        let wf = &self.workflows[wf_id];
         (wf.start_edges(), wf.end_edges())
     }
 
@@ -306,9 +309,10 @@ mod test {
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        op.start_workflow(exec_id, wf_id).await;
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -322,9 +326,10 @@ mod test {
     async fn test_operator_start_workflow() {
         let op = Operator::new(vec![]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        let wf_id = WorkflowId::default();
+        op.start_workflow(exec_id, wf_id).await;
         let executors = op.executors.lock().await;
-        assert_eq!(executors.get(&exec_id), Some(&State::Running(0)));
+        assert_eq!(executors.get(&exec_id), Some(&State::Running(wf_id)));
     }
 
     #[tokio::test]
@@ -332,9 +337,10 @@ mod test {
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        op.start_workflow(exec_id, wf_id).await;
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -369,9 +375,10 @@ mod test {
         let builder = WorkflowBuilder::default()
             .add_node(Arc::new(node.to_node("node")))
             .unwrap();
+        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        op.start_workflow(exec_id, wf_id).await;
         op.add_new_container(edge, exec_id, "test").await.unwrap();
         let node = op.get_next_node().await.unwrap().0;
         let f = node.run(&op, exec_id);

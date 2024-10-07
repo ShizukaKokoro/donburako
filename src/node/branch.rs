@@ -210,9 +210,10 @@ mod test {
         let builder = WorkflowBuilder::default()
             .add_node(Arc::new(node.to_node("node")))
             .unwrap();
+        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        op.start_workflow(exec_id, wf_id).await;
 
         op.add_new_container(edge_input.clone(), exec_id, true)
             .await
@@ -287,9 +288,10 @@ mod test {
         let builder = WorkflowBuilder::default()
             .add_node(Arc::new(node.to_node("node")))
             .unwrap();
+        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
-        op.start_workflow(exec_id, 0).await;
+        op.start_workflow(exec_id, wf_id).await;
 
         op.add_new_container(edge1.clone(), exec_id, 1)
             .await

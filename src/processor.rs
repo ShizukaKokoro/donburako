@@ -4,7 +4,7 @@
 
 use crate::node::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
-use crate::workflow::WorkflowBuilder;
+use crate::workflow::{WorkflowBuilder, WorkflowId};
 use log::{debug, info};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -224,11 +224,11 @@ impl Processor {
     ///
     /// # Arguments
     ///
-    /// * `index` - ワークフローのインデックス
-    pub async fn start(&self, index: usize) -> ExecutorId {
-        info!("Start workflow: {:?}", index);
+    /// * `wf_id` - ワークフローID
+    pub async fn start(&self, wf_id: WorkflowId) -> ExecutorId {
+        info!("Start workflow: {:?}", wf_id);
         let id = ExecutorId::new();
-        self.op.start_workflow(id, index).await;
+        self.op.start_workflow(id, wf_id).await;
         id
     }
 
