@@ -275,6 +275,15 @@ impl Operator {
             State::Finished(index) => Some(*index),
         }
     }
+
+    /// ワークフローIDから始点と終点のエッジを取得
+    pub(crate) async fn get_start_end_edges(
+        &self,
+        index: usize,
+    ) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
+        let wf = &self.workflows[index];
+        (wf.start_edges(), wf.end_edges())
+    }
 }
 
 #[cfg(test)]
