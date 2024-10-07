@@ -237,7 +237,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
-    /// * `wf_id` - ワークフローのインデックス
+    /// * `wf_id` - ワークフローID
     pub(crate) async fn start_workflow(&self, exec_id: ExecutorId, wf_id: WorkflowId) {
         let _ = self
             .executors
