@@ -7,13 +7,13 @@
 //! ノード同士の繋がりはエッジによって表される。
 
 mod branch;
-mod call_sub;
 pub mod edge;
 mod func;
+mod rec;
 
 pub use self::branch::{FirstChoiceNode, IfNode};
-pub use self::call_sub::RecursiveNode;
 pub use self::func::UserNode;
+pub use self::rec::RecursiveNode;
 
 use self::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
