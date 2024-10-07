@@ -191,6 +191,14 @@ impl ContainerMap {
                 }
                 false
             }
+            NodeType::Recursive(node) => {
+                for edge in node.inputs() {
+                    if !self.check_edge_exists(edge.clone(), exec_id) {
+                        return false;
+                    }
+                }
+                true
+            }
         }
     }
 

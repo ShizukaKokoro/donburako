@@ -7,11 +7,12 @@
 //! ノード同士の繋がりはエッジによって表される。
 
 mod branch;
-pub mod call_sub;
+mod call_sub;
 pub mod edge;
-mod func; // TODO: 隠蔽して再use
+mod func;
 
 pub use self::branch::{FirstChoiceNode, IfNode};
+pub use self::call_sub::RecursiveNode;
 pub use self::func::UserNode;
 
 use self::edge::Edge;
@@ -73,6 +74,7 @@ impl Node {
             NodeType::User(node) => node.run(op, exec_id).await,
             NodeType::If(node) => node.run(op, exec_id).await,
             NodeType::FirstChoice(node) => node.run(op, exec_id).await,
+            NodeType::Recursive(node) => node.run(op, exec_id).await,
         }
     }
 
@@ -82,6 +84,7 @@ impl Node {
             NodeType::User(node) => node.inputs().clone(),
             NodeType::If(node) => vec![node.input().clone()],
             NodeType::FirstChoice(node) => node.inputs().clone(),
+            NodeType::Recursive(node) => node.inputs().clone(),
         }
     }
 
@@ -96,6 +99,7 @@ impl Node {
             NodeType::User(node) => node.is_blocking(),
             NodeType::If(_) => false,
             NodeType::FirstChoice(_) => false,
+            NodeType::Recursive(_) => false,
         }
     }
 
@@ -125,4 +129,6 @@ pub(crate) enum NodeType {
     If(branch::IfNode),
     /// 最速ノード
     FirstChoice(FirstChoiceNode),
+    /// 再帰ノード
+    Recursive(RecursiveNode),
 }
