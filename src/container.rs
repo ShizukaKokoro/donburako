@@ -7,6 +7,7 @@
 use crate::node::edge::Edge;
 use crate::node::{Node, NodeType};
 use crate::operator::ExecutorId;
+use log::warn;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -97,6 +98,12 @@ impl Container {
     pub fn migrate(&mut self, from: &mut Self) {
         self.data = from.data.take();
         self.ty = from.ty.take();
+    }
+
+    /// データをとにかく取り出す
+    fn take_anyway(&mut self) {
+        let _ = self.data.take();
+        let _ = self.ty.take();
     }
 }
 impl std::fmt::Debug for Container {
@@ -246,6 +253,17 @@ impl ContainerMap {
         }
         let _ = self.0.insert((edge, exec_id), container);
         Ok(())
+    }
+}
+impl Drop for ContainerMap {
+    fn drop(&mut self) {
+        for ((edge, exec_id), con) in self.0.iter_mut() {
+            warn!(
+                "ContainerMap is dropped with data (edge: {:?}, exec_id: {:?})",
+                edge, exec_id
+            );
+            con.take_anyway();
+        }
     }
 }
 
