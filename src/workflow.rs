@@ -4,7 +4,7 @@
 
 use crate::node::edge::Edge;
 use crate::node::Node;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -39,14 +39,29 @@ impl WorkflowBuilder {
     /// ワークフローの生成
     pub(crate) fn build(self) -> Workflow {
         let mut input_to_node = HashMap::new();
+        let mut all_edges = HashSet::new();
+        let mut input_edges = HashSet::new();
+        let mut output_edges = HashSet::new();
 
         for node in self.nodes.iter() {
             for input in node.inputs() {
                 let _ = input_to_node.insert(input.clone(), node.clone());
+                let _ = all_edges.insert(input.clone());
+                let _ = input_edges.insert(input.clone());
+            }
+            for output in node.outputs() {
+                let _ = all_edges.insert(output.clone());
+                let _ = output_edges.insert(output.clone());
             }
         }
 
-        Workflow { input_to_node }
+        let start_edges = all_edges.difference(&output_edges).cloned().collect();
+        let end_edges = all_edges.difference(&input_edges).cloned().collect();
+        Workflow {
+            input_to_node,
+            start_edges,
+            end_edges,
+        }
     }
 }
 
@@ -55,6 +70,10 @@ impl WorkflowBuilder {
 pub(crate) struct Workflow {
     /// Edge を入力に持つ Node へのマップ
     input_to_node: HashMap<Arc<Edge>, Arc<Node>>,
+    /// 始点のエッジ
+    start_edges: Vec<Arc<Edge>>,
+    /// 終点のエッジ
+    end_edges: Vec<Arc<Edge>>,
 }
 impl Workflow {
     /// エッジからノードを取得
@@ -66,6 +85,16 @@ impl Workflow {
     /// * `edge` - エッジ
     pub fn get_node(&self, edge: &Arc<Edge>) -> Option<Arc<Node>> {
         self.input_to_node.get(edge).cloned()
+    }
+
+    /// 始点のエッジを取得
+    pub(crate) fn start_edges(&self) -> &Vec<Arc<Edge>> {
+        &self.start_edges
+    }
+
+    /// 終点のエッジを取得
+    pub(crate) fn end_edges(&self) -> &Vec<Arc<Edge>> {
+        &self.end_edges
     }
 }
 
