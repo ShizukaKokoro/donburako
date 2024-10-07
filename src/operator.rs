@@ -63,7 +63,6 @@ enum State {
     /// 実行中
     Running(WorkflowId),
     /// 終了
-    #[allow(dead_code)] // TODO: 終了状態を実装したら削除する
     Finished(WorkflowId),
 }
 
