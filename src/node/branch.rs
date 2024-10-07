@@ -90,7 +90,7 @@ impl IfNode {
 #[derive(Debug)]
 pub struct FirstChoiceNode {
     inputs: Vec<Arc<Edge>>,
-    outputs: Option<Arc<Edge>>,
+    output: Option<Arc<Edge>>,
 }
 impl FirstChoiceNode {
     /// ノードの生成
@@ -101,20 +101,20 @@ impl FirstChoiceNode {
         }
         Ok(FirstChoiceNode {
             inputs,
-            outputs: None,
+            output: None,
         })
     }
 
     /// 出力エッジの追加
     pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Result<Arc<Edge>, NodeError> {
-        if self.outputs.is_some() {
+        if self.output.is_some() {
             return Err(NodeError::OutputEdgeExists);
         }
         if !self.inputs[0].check_type::<T>() {
             return Err(NodeError::EdgeTypeMismatch);
         }
         let edge = Arc::new(Edge::new::<T>());
-        self.outputs = Some(edge.clone());
+        self.output = Some(edge.clone());
         Ok(edge)
     }
 
@@ -124,8 +124,8 @@ impl FirstChoiceNode {
     }
 
     /// 出力エッジの取得
-    pub(super) fn outputs(&self) -> &Arc<Edge> {
-        self.outputs.as_ref().unwrap()
+    pub(super) fn output(&self) -> &Arc<Edge> {
+        self.output.as_ref().unwrap()
     }
 
     /// ノードに変換
@@ -138,7 +138,7 @@ impl FirstChoiceNode {
             let con = op.get_container(edge.clone(), exec_id).await;
             if con.is_some() {
                 let con = con.unwrap();
-                op.add_container(self.outputs().clone(), exec_id, con)
+                op.add_container(self.output().clone(), exec_id, con)
                     .await
                     .unwrap();
                 break;
@@ -255,7 +255,7 @@ mod test {
         let edge2 = Arc::new(Edge::new::<i32>());
         let mut node = FirstChoiceNode::new(vec![edge1.clone(), edge2.clone()]).unwrap();
         let edge = node.add_output::<i32>().unwrap();
-        assert_eq!(node.outputs.as_ref().unwrap(), &edge);
+        assert_eq!(node.output.as_ref().unwrap(), &edge);
     }
 
     #[test]

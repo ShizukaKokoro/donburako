@@ -38,6 +38,11 @@ impl RecursiveNode {
         &self.input
     }
 
+    /// 出力エッジの取得
+    pub(super) fn outputs(&self) -> &Vec<Arc<Edge>> {
+        &self.output
+    }
+
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
         Node::new(NodeType::Recursive(self), name)

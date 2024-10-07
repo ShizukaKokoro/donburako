@@ -88,6 +88,16 @@ impl Node {
         }
     }
 
+    /// 出力エッジの取得
+    pub(crate) fn outputs(&self) -> Vec<Arc<Edge>> {
+        match &self.kind {
+            NodeType::User(node) => node.outputs().clone(),
+            NodeType::If(node) => vec![node.true_output().clone(), node.false_output().clone()],
+            NodeType::FirstChoice(node) => vec![node.output().clone()],
+            NodeType::Recursive(node) => node.outputs().clone(),
+        }
+    }
+
     /// ノードの種類の取得
     pub(crate) fn kind(&self) -> &NodeType {
         &self.kind
@@ -126,7 +136,7 @@ pub(crate) enum NodeType {
     /// ユーザー定義ノード
     User(UserNode),
     /// 分岐ノード
-    If(branch::IfNode),
+    If(IfNode),
     /// 最速ノード
     FirstChoice(FirstChoiceNode),
     /// 再帰ノード
