@@ -7,9 +7,9 @@
 //! ノード同士の繋がりはエッジによって表される。
 
 mod branch;
+pub mod call_sub;
 pub mod edge;
-mod func;
-pub mod iter; // TODO: 隠蔽して再use
+mod func; // TODO: 隠蔽して再use
 
 pub use self::branch::{FirstChoiceNode, IfNode};
 pub use self::func::UserNode;
