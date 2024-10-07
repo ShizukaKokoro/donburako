@@ -17,6 +17,7 @@ pub use self::rec::RecursiveNode;
 
 use self::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
+use crate::workflow::WorkflowId;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -116,6 +117,16 @@ impl Node {
     /// ノードの名前の取得
     pub(crate) fn name(&self) -> &'static str {
         self.name
+    }
+
+    /// エッジの数が正しいかどうか
+    pub(crate) fn is_edge_count_valid(&self, op: &Operator, wf_id: WorkflowId) -> bool {
+        match &self.kind {
+            NodeType::User(_) => true,
+            NodeType::If(_) => true,
+            NodeType::FirstChoice(_) => true,
+            NodeType::Recursive(node) => node.is_edge_count_valid(op, wf_id),
+        }
     }
 }
 impl std::cmp::PartialEq for Node {

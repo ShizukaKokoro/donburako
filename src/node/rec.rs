@@ -2,10 +2,9 @@
 //!
 //! 再帰呼び出しを行うノードを実装する。
 
-use log::debug;
-
 use super::edge::Edge;
 use super::*;
+use log::debug;
 use std::sync::Arc;
 
 /// 再帰ノード
@@ -51,10 +50,16 @@ impl RecursiveNode {
         Node::new(NodeType::Recursive(self), name)
     }
 
+    /// エッジの数が正しいかどうか
+    pub(crate) fn is_edge_count_valid(&self, op: &Operator, wf_id: WorkflowId) -> bool {
+        let (start, end) = op.get_start_end_edges(&wf_id);
+        self.input.len() == start.len() && self.output.len() == end.len()
+    }
+
     /// ノードの実行
     pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
         let wf_id = op.get_workflow_id(exec_id).await.unwrap();
-        let (start, end) = op.get_start_end_edges(&wf_id).await;
+        let (start, end) = op.get_start_end_edges(&wf_id);
         let id = ExecutorId::new();
         debug!("start workflow: {:?}({:?}) in {:?}", wf_id, id, exec_id);
         op.start_workflow(id, wf_id).await;

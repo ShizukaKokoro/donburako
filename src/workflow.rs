@@ -4,6 +4,7 @@
 
 use crate::node::edge::Edge;
 use crate::node::Node;
+use crate::operator::Operator;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
@@ -109,6 +110,16 @@ impl Workflow {
     /// 終点のエッジを取得
     pub(crate) fn end_edges(&self) -> &Vec<Arc<Edge>> {
         &self.end_edges
+    }
+
+    /// エッジの数が正しいかどうか
+    pub(crate) fn is_edge_count_valid(&self, op: &Operator, wf_id: WorkflowId) -> bool {
+        for node in self.input_to_node.values() {
+            if !node.is_edge_count_valid(op, wf_id) {
+                return false;
+            }
+        }
+        true
     }
 }
 

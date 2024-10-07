@@ -25,9 +25,9 @@ pub enum ProcessorError {
     #[error("Operator error")]
     OperatorError(#[from] crate::operator::OperatorError),
 
-    /// ワークフローの開始に失敗
-    #[error("Failed to start workflow")]
-    FailedToStartWorkflow,
+    /// エッジの数が不正
+    #[error("Some node has invalid edge count")]
+    InvalidEdgeCount,
 
     /// まだ終了していないエッジを取得しようとした
     #[error("Not finished edge")]
@@ -132,6 +132,9 @@ impl ProcessorBuilder {
         debug!("Start building processor");
         let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
+        if !op.is_edge_count_valid() {
+            return Err(ProcessorError::InvalidEdgeCount);
+        }
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 

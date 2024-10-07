@@ -96,6 +96,16 @@ impl Operator {
         }
     }
 
+    /// エッジの数が正しいかどうか
+    pub(crate) fn is_edge_count_valid(&self) -> bool {
+        for (wf_id, wf) in self.workflows.iter() {
+            if !wf.is_edge_count_valid(self, *wf_id) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
     async fn enqueue_node_if_executable(
         &self,
@@ -279,7 +289,7 @@ impl Operator {
     }
 
     /// ワークフローIDから始点と終点のエッジを取得
-    pub(crate) async fn get_start_end_edges(
+    pub(crate) fn get_start_end_edges(
         &self,
         wf_id: &WorkflowId,
     ) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
