@@ -94,12 +94,6 @@ impl Container {
         }
     }
 
-    /// データの移行
-    pub fn migrate(&mut self, from: &mut Self) {
-        self.data = from.data.take();
-        self.ty = from.ty.take();
-    }
-
     /// データをとにかく取り出す
     fn take_anyway(&mut self) {
         let _ = self.data.take();
