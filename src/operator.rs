@@ -284,6 +284,16 @@ impl Operator {
         let wf = &self.workflows[index];
         (wf.start_edges(), wf.end_edges())
     }
+
+    /// 特定の実行IDに対応するコンテナを全て終了処理する
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    pub(crate) async fn finish_containers(&self, exec_id: ExecutorId) {
+        self.containers.lock().await.finish_containers(exec_id);
+        let _ = self.executors.lock().await.remove(&exec_id).unwrap();
+    }
 }
 
 #[cfg(test)]

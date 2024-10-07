@@ -259,6 +259,20 @@ impl ContainerMap {
         let _ = self.0.get_mut(&exec_id).unwrap().insert(edge, container);
         Ok(())
     }
+
+    /// 特定の実行IDに対応するコンテナを全て終了処理する
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    pub(crate) fn finish_containers(&mut self, exec_id: ExecutorId) {
+        if let Some(con_map) = self.0.get_mut(&exec_id) {
+            for (_, container) in con_map.iter_mut() {
+                container.take_anyway();
+            }
+            let _ = self.0.remove(&exec_id);
+        }
+    }
 }
 impl Drop for ContainerMap {
     fn drop(&mut self) {
