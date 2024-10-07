@@ -116,7 +116,6 @@ impl Operator {
                 self.queue.lock().await.push(node, exec_id);
             }
         } else {
-            println!("Check finish");
             self.check_finish(exec_id, &mut exec).await;
         }
         Ok(())
