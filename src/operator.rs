@@ -309,7 +309,9 @@ mod test {
     async fn test_operator_enqueue_node_if_executable() {
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
+            .add_node(node.clone())
+            .unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
@@ -327,7 +329,7 @@ mod test {
     async fn test_operator_start_workflow() {
         let op = Operator::new(vec![]);
         let exec_id = ExecutorId::new();
-        let wf_id = WorkflowId::default();
+        let wf_id = WorkflowId::new("test");
         op.start_workflow(exec_id, wf_id).await;
         let executors = op.executors.lock().await;
         assert_eq!(executors.get(&exec_id), Some(&State::Running(wf_id)));
@@ -337,7 +339,9 @@ mod test {
     async fn test_operator_get_next_node() {
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
+            .add_node(node.clone())
+            .unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
@@ -375,7 +379,9 @@ mod test {
             Choice::All,
         );
         let edge_to = node.add_output::<&str>();
-        let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
+        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
+            .add_node(Arc::new(node))
+            .unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
