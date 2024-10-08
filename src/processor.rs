@@ -8,7 +8,6 @@ use crate::workflow::{WorkflowBuilder, WorkflowId};
 use log::{debug, info};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
@@ -34,14 +33,16 @@ pub enum ProcessorError {
     NotFinishedEdge,
 }
 
+type Handler<T> = (JoinHandle<Result<T, ProcessorError>>, ExecutorId);
+
 /// ハンドラ管理
 struct Handlers<T> {
-    handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>>,
+    handles: Vec<Option<Handler<T>>>,
     retains: VecDeque<usize>,
 }
 impl<T> Handlers<T> {
     fn new(n: usize) -> Self {
-        let mut handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>> = Vec::with_capacity(n);
+        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
         let mut retains = VecDeque::new();
         for i in 0..n {
             retains.push_back(i);
@@ -50,15 +51,20 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>) {
+    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>, exec_id: ExecutorId) {
         if let Some(retain) = self.retains.pop_front() {
-            self.handles[retain] = Some(handle);
+            self.handles[retain] = Some((handle, exec_id));
         }
     }
 
     fn iter(
         &mut self,
-    ) -> impl Iterator<Item = (usize, &mut JoinHandle<Result<T, ProcessorError>>)> {
+    ) -> impl Iterator<
+        Item = (
+            usize,
+            &mut (JoinHandle<Result<T, ProcessorError>>, ExecutorId),
+        ),
+    > {
         self.handles
             .iter_mut()
             .enumerate()
@@ -84,8 +90,6 @@ impl<T> Handlers<T> {
 #[derive(Default)]
 pub struct ProcessorBuilder {
     workflow: Vec<WorkflowBuilder>,
-    check_time: Duration,
-    loop_wait_time: Duration,
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -96,35 +100,7 @@ impl ProcessorBuilder {
     pub fn add_workflow(self, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
         wfs.push(wf);
-        Self {
-            workflow: wfs,
-            check_time: Duration::from_micros(10),
-            loop_wait_time: Duration::from_micros(1),
-        }
-    }
-
-    /// チェック時間の設定
-    ///
-    /// # Arguments
-    ///
-    /// * `time` - チェック時間
-    pub fn set_check_time_micros(self, time: u64) -> Self {
-        Self {
-            check_time: Duration::from_micros(time),
-            ..self
-        }
-    }
-
-    /// ループ待機時間の設定
-    ///
-    /// # Arguments
-    ///
-    /// * `time` - ループ待機時間
-    pub fn set_loop_wait_time_micros(self, time: u64) -> Self {
-        Self {
-            loop_wait_time: Duration::from_micros(time),
-            ..self
-        }
+        Self { workflow: wfs }
     }
 
     /// ビルド
@@ -147,60 +123,63 @@ impl ProcessorBuilder {
                     debug!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
-                    let handle = if let Some((node, exec_id)) = op.get_next_node().await {
+                    let (handle, exec_id) = if let Some((node, exec_id)) = op.get_next_node().await
+                    {
                         let op_clone = op.clone();
                         if node.is_blocking() {
                             let rt_handle = Handle::current();
-                            spawn_blocking(move || {
-                                rt_handle.block_on(async {
-                                    node.run(&op_clone, exec_id).await;
-                                });
-                                Ok(node.name())
-                            })
+                            (
+                                spawn_blocking(move || {
+                                    rt_handle.block_on(async {
+                                        node.run(&op_clone, exec_id).await;
+                                    });
+                                    Ok(node.name())
+                                }),
+                                exec_id,
+                            )
                         } else {
                             #[cfg(not(feature = "dev"))]
                             {
-                                spawn(async move {
-                                    node.run(&op_clone, exec_id).await;
-                                    Ok(node.name())
-                                })
+                                (
+                                    spawn(async move {
+                                        node.run(&op_clone, exec_id).await;
+                                        Ok(node.name())
+                                    }),
+                                    exec_id,
+                                )
                             }
                             #[cfg(feature = "dev")]
-                            tokio::task::Builder::new()
-                                .name(node.name())
-                                .spawn(async move {
-                                    node.run(&op_clone, exec_id).await;
-                                    Ok(node.name())
-                                })
-                                .unwrap()
+                            (
+                                tokio::task::Builder::new()
+                                    .name(node.name())
+                                    .spawn(async move {
+                                        node.run(&op_clone, exec_id).await;
+                                        Ok(node.name())
+                                    })
+                                    .unwrap(),
+                                exec_id,
+                            )
                         }
                     } else {
                         break;
                     };
-                    handlers.push(handle);
+                    handlers.push(handle, exec_id);
                 }
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
                     debug!("Check running tasks");
                 }
-                for (key, handle) in handlers.iter() {
-                    tokio::select! {
-                            // タスクが終了した場合
-                            res = handle => {
-                                if let Ok(name) = res {
-                                    debug!("Task is done: {:?}", name.unwrap());
-                                }
-                                finished.push(key);
-                            }
-                            // タスクが終了していない場合
-                            _ = tokio::time::sleep(self.check_time) => {}
+                for (key, (handle, exec_id)) in handlers.iter() {
+                    if op.is_finished(*exec_id).await {
+                        let res = handle.await.unwrap().unwrap();
+                        debug!("Task is finished: {:?}", res);
+                        finished.push(key);
                     }
                 }
                 for key in finished {
                     handlers.remove(key);
                 }
-                tokio::time::sleep(self.loop_wait_time).await;
             }
             Ok(())
         });
@@ -293,9 +272,10 @@ mod tests {
         let handle1 = spawn(async { Ok(()) });
         let handle2 = spawn(async { Ok(()) });
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id);
+        handlers.push(handle1, exec_id);
+        handlers.push(handle2, exec_id);
 
         assert_eq!(handlers.handles.len(), 3);
 
@@ -313,9 +293,10 @@ mod tests {
         let handle1 = spawn(async { Ok(1) });
         let handle2 = spawn(async { Ok(2) });
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id);
+        handlers.push(handle1, exec_id);
+        handlers.push(handle2, exec_id);
         handlers.remove(1);
 
         let mut iter_key = Vec::new();
@@ -334,20 +315,18 @@ mod tests {
         let handle2 = spawn(async { Ok(2) });
         let handle3 = spawn(async { Ok(3) });
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id);
+        handlers.push(handle1, exec_id);
+        handlers.push(handle2, exec_id);
         handlers.remove(1);
-        handlers.push(handle3);
+        handlers.push(handle3, exec_id);
 
         let mut iter_index = Vec::new();
 
-        for (key, handle) in handlers.iter() {
-            tokio::select! {
-                    res = handle => {
-                        iter_index.push((key,res.unwrap().unwrap()));
-                }
-            }
+        for (key, (handle, _)) in handlers.iter() {
+            let res = handle.await.unwrap().unwrap();
+            iter_index.push((key, res));
         }
         assert_eq!(iter_index, vec![(0, 0), (1, 3), (2, 2)]);
 

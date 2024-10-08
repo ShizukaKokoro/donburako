@@ -149,7 +149,6 @@ impl Operator {
         let _ = exec.insert(exec_id, State::Finished(wf_id));
     }
 
-    #[cfg(test)]
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         let exec = self.executors.lock().await;
         matches!(exec.get(&exec_id), Some(State::Finished(_)))
