@@ -7,7 +7,6 @@
 //! ノード同士の繋がりはエッジによって表される。
 
 mod branch;
-pub mod edge;
 mod func;
 mod iter;
 mod rec;
@@ -16,7 +15,7 @@ pub use self::branch::{FirstChoiceNode, IfNode};
 pub use self::func::UserNode;
 pub use self::rec::RecursiveNode;
 
-use self::edge::Edge;
+use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::WorkflowId;
 use std::sync::Arc;

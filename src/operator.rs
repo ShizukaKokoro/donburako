@@ -1,7 +1,7 @@
 //! オペレーターモジュール
 
 use crate::container::{Container, ContainerError, ContainerMap};
-use crate::node::edge::Edge;
+use crate::edge::Edge;
 use crate::node::Node;
 use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};

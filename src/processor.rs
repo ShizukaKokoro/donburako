@@ -2,7 +2,7 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
-use crate::node::edge::Edge;
+use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
 use log::{debug, info};

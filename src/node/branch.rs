@@ -2,8 +2,8 @@
 //!
 //! データの流れを分岐させ、統合するノードを定義する。
 
-use super::edge::Edge;
 use super::*;
+use crate::edge::Edge;
 use std::sync::Arc;
 
 /// 分岐ノード

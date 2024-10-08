@@ -2,8 +2,8 @@
 //!
 //! 再帰呼び出しを行うノードを実装する。
 
-use super::edge::Edge;
 use super::*;
+use crate::edge::Edge;
 use log::debug;
 use std::sync::Arc;
 

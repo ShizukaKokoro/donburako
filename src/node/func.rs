@@ -2,8 +2,8 @@
 //!
 //! 関数を引数に取るノードを定義する。
 
-use super::edge::Edge;
 use super::*;
+use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use std::future::Future;
 use std::pin::Pin;

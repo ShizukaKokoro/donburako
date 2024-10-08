@@ -2,7 +2,7 @@
 //!
 //! ワークフローはノードからなる有向グラフ。
 
-use crate::node::edge::Edge;
+use crate::edge::Edge;
 use crate::node::Node;
 use crate::operator::Operator;
 use std::collections::{HashMap, HashSet};

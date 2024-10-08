@@ -4,7 +4,7 @@
 //! 中に入っているデータの型は、決まっておらず、任意の型を格納し、任意の型を取り出すことができる。
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
-use crate::node::edge::Edge;
+use crate::edge::Edge;
 use crate::node::{Node, NodeType};
 use crate::operator::ExecutorId;
 use log::warn;

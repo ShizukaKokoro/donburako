@@ -83,6 +83,7 @@
 #![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
 pub mod container;
+pub mod edge;
 pub mod node;
 pub mod operator;
 pub mod processor;
