@@ -273,16 +273,6 @@ impl Operator {
         !self.queue.lock().await.queue.is_empty()
     }
 
-    /// 実行IDからワークフローIDを取得
-    pub async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
-        let exec = self.executors.lock().await;
-        let state = exec.get(&exec_id)?;
-        match state {
-            State::Running(wf_id) => Some(*wf_id),
-            State::Finished(wf_id) => Some(*wf_id),
-        }
-    }
-
     /// ワークフローIDから始点と終点のエッジを取得
     pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
         let wf = &self.workflows[wf_id];
@@ -307,12 +297,10 @@ mod test {
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
+        let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
-            .add_node(node.clone())
-            .unwrap();
-        let wf_id = builder.id();
+        let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
         op.start_workflow(exec_id, wf_id).await;
@@ -337,12 +325,10 @@ mod test {
 
     #[tokio::test]
     async fn test_operator_get_next_node() {
+        let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
-            .add_node(node.clone())
-            .unwrap();
-        let wf_id = builder.id();
+        let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
         op.start_workflow(exec_id, wf_id).await;
@@ -356,6 +342,7 @@ mod test {
 
     #[tokio::test]
     async fn test_workflow_wait_finish() {
+        let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
         let mut node = Node::new(
             vec![edge.clone()],
@@ -379,10 +366,9 @@ mod test {
             Choice::All,
         );
         let edge_to = node.add_output::<&str>();
-        let builder = WorkflowBuilder::new(WorkflowId::new("test"))
+        let builder = WorkflowBuilder::new(wf_id)
             .add_node(Arc::new(node))
             .unwrap();
-        let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
         op.start_workflow(exec_id, wf_id).await;

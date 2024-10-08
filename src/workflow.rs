@@ -54,11 +54,6 @@ impl WorkflowBuilder {
         Ok(Self { nodes, ..self })
     }
 
-    /// ワークフローIDの取得
-    pub fn id(&self) -> WorkflowId {
-        self.id
-    }
-
     /// ワークフローの生成
     pub(crate) fn build(self) -> (Workflow, WorkflowId) {
         let mut input_to_node = HashMap::new();
