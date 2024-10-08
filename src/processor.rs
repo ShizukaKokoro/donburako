@@ -1,5 +1,6 @@
 //! プロセッサーモジュール
 //!
+<<<<<<< HEAD
 //! タスクの実行やレジストリの管理を行うプロセッサーを実装するモジュール。
 
 use crate::registry::Registry;
@@ -25,12 +26,97 @@ pub enum ProcessorError {
     /// ワークフローの実行開始エラー
     #[error("failed to start workflow")]
     FailedToStartWorkflow,
+=======
+//! ワークフローを保持し、コンテナを移動させる。
+
+use crate::node::edge::Edge;
+use crate::operator::{ExecutorId, Operator};
+use crate::workflow::{WorkflowBuilder, WorkflowId};
+use log::{debug, info};
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::Duration;
+use thiserror::Error;
+use tokio::runtime::Handle;
+use tokio::task::{spawn, spawn_blocking, JoinHandle};
+use tokio_util::sync::CancellationToken;
+
+/// プロセッサーエラー
+#[derive(Debug, Error, PartialEq)]
+pub enum ProcessorError {
+    /// コンテナエラー
+    #[error("Container error")]
+    ContainerError(#[from] crate::container::ContainerError),
+
+    /// オペレーターエラー
+    #[error("Operator error")]
+    OperatorError(#[from] crate::operator::OperatorError),
+
+    /// エッジの数が不正
+    #[error("Some node has invalid edge count")]
+    InvalidEdgeCount,
+
+    /// まだ終了していないエッジを取得しようとした
+    #[error("Not finished edge")]
+    NotFinishedEdge,
+}
+
+/// ハンドラ管理
+struct Handlers<T> {
+    handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>>,
+    retains: VecDeque<usize>,
+}
+impl<T> Handlers<T> {
+    fn new(n: usize) -> Self {
+        let mut handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>> = Vec::with_capacity(n);
+        let mut retains = VecDeque::new();
+        for i in 0..n {
+            retains.push_back(i);
+            handles.push(None);
+        }
+        Self { handles, retains }
+    }
+
+    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>) {
+        if let Some(retain) = self.retains.pop_front() {
+            self.handles[retain] = Some(handle);
+        }
+    }
+
+    fn iter(
+        &mut self,
+    ) -> impl Iterator<Item = (usize, &mut JoinHandle<Result<T, ProcessorError>>)> {
+        self.handles
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, handle)| handle.is_some())
+            .map(|(key, handle)| (key, handle.as_mut().unwrap()))
+    }
+
+    fn remove(&mut self, key: usize) {
+        self.retains.push_back(key);
+        self.handles[key] = None;
+    }
+
+    fn is_full(&self) -> bool {
+        self.retains.is_empty()
+    }
+
+    fn is_running(&self) -> bool {
+        self.retains.len() != self.handles.len()
+    }
+>>>>>>> refactor-iter_by_sub_workflow
 }
 
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
     workflow: Vec<WorkflowBuilder>,
+<<<<<<< HEAD
+=======
+    check_time: Duration,
+    loop_wait_time: Duration,
+>>>>>>> refactor-iter_by_sub_workflow
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -41,12 +127,45 @@ impl ProcessorBuilder {
     pub fn add_workflow(self, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
         wfs.push(wf);
+<<<<<<< HEAD
         Self { workflow: wfs }
+=======
+        Self {
+            workflow: wfs,
+            check_time: Duration::from_micros(10),
+            loop_wait_time: Duration::from_micros(1),
+        }
+    }
+
+    /// チェック時間の設定
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - チェック時間
+    pub fn set_check_time_micros(self, time: u64) -> Self {
+        Self {
+            check_time: Duration::from_micros(time),
+            ..self
+        }
+    }
+
+    /// ループ待機時間の設定
+    ///
+    /// # Arguments
+    ///
+    /// * `time` - ループ待機時間
+    pub fn set_loop_wait_time_micros(self, time: u64) -> Self {
+        Self {
+            loop_wait_time: Duration::from_micros(time),
+            ..self
+        }
+>>>>>>> refactor-iter_by_sub_workflow
     }
 
     /// ビルド
     pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
         debug!("Start building processor");
+<<<<<<< HEAD
         let (workflow, wf_ids) = {
             let mut workflow = HashMap::new();
             let mut wf_ids = Vec::new();
@@ -77,11 +196,25 @@ impl ProcessorBuilder {
             };
             debug!("End setting up processor: capacity={}", n);
 
+=======
+        let mut handlers = Handlers::new(n);
+        let op = Operator::new(self.workflow);
+        if !op.is_edge_count_valid() {
+            return Err(ProcessorError::InvalidEdgeCount);
+        }
+        let op_clone = op.clone();
+        debug!("End setting up processor: capacity={}", n);
+
+        let cancel = CancellationToken::new();
+        let cancel_clone = cancel.clone();
+        let handle = spawn(async move {
+>>>>>>> refactor-iter_by_sub_workflow
             loop {
                 if cancel_clone.is_cancelled() {
                     break;
                 }
 
+<<<<<<< HEAD
                 while let Ok(wf_id) = rx.try_recv() {
                     debug!("Start workflow: {:?}", wf_id);
                     let rg = Arc::new(Mutex::new(Registry::new(wf_id)));
@@ -148,14 +281,79 @@ impl ProcessorBuilder {
                     }
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+=======
+                if op.has_executable_node().await {
+                    debug!("Get nodes enabled to run");
+                }
+                while !handlers.is_full() {
+                    let handle = if let Some((node, exec_id)) = op.get_next_node().await {
+                        let op_clone = op.clone();
+                        if node.is_blocking() {
+                            let rt_handle = Handle::current();
+                            spawn_blocking(move || {
+                                rt_handle.block_on(async {
+                                    node.run(&op_clone, exec_id).await;
+                                });
+                                Ok(node.name())
+                            })
+                        } else {
+                            #[cfg(not(feature = "dev"))]
+                            {
+                                spawn(async move {
+                                    node.run(&op_clone, exec_id).await;
+                                    Ok(node.name())
+                                })
+                            }
+                            #[cfg(feature = "dev")]
+                            tokio::task::Builder::new()
+                                .name(node.name())
+                                .spawn(async move {
+                                    node.run(&op_clone, exec_id).await;
+                                    Ok(node.name())
+                                })
+                                .unwrap()
+                        }
+                    } else {
+                        break;
+                    };
+                    handlers.push(handle);
+                }
+
+                let mut finished = Vec::new();
+                if handlers.is_running() {
+                    debug!("Check running tasks");
+                }
+                for (key, handle) in handlers.iter() {
+                    tokio::select! {
+                            // タスクが終了した場合
+                            res = handle => {
+                                if let Ok(name) = res {
+                                    debug!("Task is done: {:?}", name.unwrap());
+                                }
+                                finished.push(key);
+                            }
+                            // タスクが終了していない場合
+                            _ = tokio::time::sleep(self.check_time) => {}
+                    }
+                }
+                for key in finished {
+                    handlers.remove(key);
+                }
+                tokio::time::sleep(self.loop_wait_time).await;
+>>>>>>> refactor-iter_by_sub_workflow
             }
             Ok(())
         });
 
         Ok(Processor {
+<<<<<<< HEAD
             wf_ids,
             handle,
             tx,
+=======
+            op: op_clone,
+            handle,
+>>>>>>> refactor-iter_by_sub_workflow
             cancel,
         })
     }
@@ -163,6 +361,7 @@ impl ProcessorBuilder {
 
 /// プロセッサー
 pub struct Processor {
+<<<<<<< HEAD
     wf_ids: Vec<WorkflowID>,
     handle: JoinHandle<Result<(), ProcessorError>>,
     tx: mpsc::Sender<WorkflowID>,
@@ -174,14 +373,64 @@ impl Processor {
         &self.wf_ids
     }
 
+=======
+    op: Operator,
+    handle: JoinHandle<Result<(), ProcessorError>>,
+    cancel: CancellationToken,
+}
+impl Processor {
+>>>>>>> refactor-iter_by_sub_workflow
     /// ワークフローの開始
     ///
     /// # Arguments
     ///
     /// * `wf_id` - ワークフローID
+<<<<<<< HEAD
     pub async fn start(&self, wf_id: WorkflowID) {
         info!("Start workflow: {:?}", wf_id);
         self.tx.send(wf_id).await.unwrap();
+=======
+    pub async fn start(&self, wf_id: WorkflowId) -> ExecutorId {
+        info!("Start workflow: {:?}", wf_id);
+        let id = ExecutorId::new();
+        self.op.start_workflow(id, wf_id).await;
+        id
+    }
+
+    /// データを設定
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    /// * `data` - データ
+    pub async fn store<T: 'static + Send + Sync>(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+        data: T,
+    ) -> Result<(), ProcessorError> {
+        self.op.add_new_container(edge, exec_id, data).await?;
+        Ok(())
+    }
+
+    /// データの取得
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    pub async fn take<T: 'static + Send + Sync>(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+    ) -> Result<T, ProcessorError> {
+        if let Some(mut con) = self.op.get_container(edge, exec_id).await {
+            Ok(con.take()?)
+        } else {
+            Err(ProcessorError::NotFinishedEdge)
+        }
+>>>>>>> refactor-iter_by_sub_workflow
     }
 
     /// プロセッサーの停止
@@ -197,3 +446,86 @@ impl Processor {
         Ok(())
     }
 }
+<<<<<<< HEAD
+=======
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[tokio::test]
+    async fn test_handlers() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(()) });
+        let handle1 = spawn(async { Ok(()) });
+        let handle2 = spawn(async { Ok(()) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+
+        assert_eq!(handlers.handles.len(), 3);
+
+        handlers.remove(0);
+        handlers.remove(1);
+        handlers.remove(2);
+
+        assert_eq!(handlers.handles.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_handlers_iter_filtered() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(0) });
+        let handle1 = spawn(async { Ok(1) });
+        let handle2 = spawn(async { Ok(2) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+        handlers.remove(1);
+
+        let mut iter_key = Vec::new();
+        for (key, _) in handlers.iter() {
+            iter_key.push(key);
+        }
+
+        assert_eq!(iter_key, vec![0, 2]);
+    }
+
+    #[tokio::test]
+    async fn test_handlers_remove() {
+        let mut handlers = Handlers::new(3);
+        let handle0 = spawn(async { Ok(0) });
+        let handle1 = spawn(async { Ok(1) });
+        let handle2 = spawn(async { Ok(2) });
+        let handle3 = spawn(async { Ok(3) });
+
+        handlers.push(handle0);
+        handlers.push(handle1);
+        handlers.push(handle2);
+        handlers.remove(1);
+        handlers.push(handle3);
+
+        let mut iter_index = Vec::new();
+
+        for (key, handle) in handlers.iter() {
+            tokio::select! {
+                    res = handle => {
+                        iter_index.push((key,res.unwrap().unwrap()));
+                }
+            }
+        }
+        assert_eq!(iter_index, vec![(0, 0), (1, 3), (2, 2)]);
+
+        handlers.remove(0);
+        handlers.remove(1);
+        handlers.remove(2);
+        assert!(handlers.handles[0].is_none());
+        assert!(handlers.handles[1].is_none());
+        assert!(handlers.handles[2].is_none());
+        assert_eq!(handlers.retains.len(), 3);
+    }
+}
+>>>>>>> refactor-iter_by_sub_workflow
