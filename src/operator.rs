@@ -273,6 +273,8 @@ impl Operator {
     }
 
     /// ワークフローの実行終了の待機
+    ///
+    /// NOTE: 再帰時の処理が遅すぎる。スタック時に確認を止めるように修正したい。
     pub async fn wait_finish(&self, exec_id: ExecutorId) {
         loop {
             let exec = self.executors.lock().await;
