@@ -72,7 +72,7 @@ impl UserNode {
 
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
-        Node::new(NodeType::User(self), name)
+        Node::new(NodeType::User(self), name, Choice::All)
     }
 
     pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {

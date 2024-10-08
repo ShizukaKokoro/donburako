@@ -44,6 +44,12 @@ impl NodeId {
     }
 }
 
+#[derive(Debug)]
+pub(crate) enum Choice {
+    All,
+    Any,
+}
+
 /// ノード
 ///
 /// NOTE: サイズが大きめ？
@@ -52,14 +58,16 @@ pub struct Node {
     id: NodeId,
     kind: NodeType,
     name: &'static str,
+    choice: Choice,
 }
 impl Node {
     /// ノードの生成
-    fn new(kind: NodeType, name: &'static str) -> Self {
+    fn new(kind: NodeType, name: &'static str, choice: Choice) -> Self {
         Node {
             id: NodeId::new(),
             kind,
             name,
+            choice,
         }
     }
 
@@ -99,11 +107,6 @@ impl Node {
         }
     }
 
-    /// ノードの種類の取得
-    pub(crate) fn kind(&self) -> &NodeType {
-        &self.kind
-    }
-
     /// ブロッキングノードかどうか
     pub(crate) fn is_blocking(&self) -> bool {
         match &self.kind {
@@ -112,6 +115,11 @@ impl Node {
             NodeType::FirstChoice(_) => false,
             NodeType::Recursive(_) => false,
         }
+    }
+
+    /// エッジの判断方法の取得
+    pub(crate) fn choice(&self) -> &Choice {
+        &self.choice
     }
 
     /// ノードの名前の取得

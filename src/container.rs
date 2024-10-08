@@ -5,7 +5,7 @@
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
 use crate::edge::Edge;
-use crate::node::{Node, NodeType};
+use crate::node::{Choice, Node};
 use crate::operator::ExecutorId;
 use log::warn;
 use std::any::{Any, TypeId};
@@ -175,36 +175,22 @@ impl ContainerMap {
     ///
     /// 実行可能な場合は true、そうでない場合は false
     pub(crate) fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
-        match node.kind() {
-            NodeType::User(node) => {
-                let mut result = true;
-                for edge in node.inputs() {
-                    if !self.check_edge_exists(edge.clone(), exec_id) {
-                        result = false;
-                        break;
-                    }
-                }
-                result
-            }
-            NodeType::If(node) => {
-                let edge = node.input();
-                self.check_edge_exists(edge.clone(), exec_id)
-            }
-            NodeType::FirstChoice(node) => {
-                for edge in node.inputs() {
-                    if self.check_edge_exists(edge.clone(), exec_id) {
-                        return true;
-                    }
-                }
-                false
-            }
-            NodeType::Recursive(node) => {
+        match node.choice() {
+            Choice::All => {
                 for edge in node.inputs() {
                     if !self.check_edge_exists(edge.clone(), exec_id) {
                         return false;
                     }
                 }
                 true
+            }
+            Choice::Any => {
+                for edge in node.inputs() {
+                    if self.check_edge_exists(edge.clone(), exec_id) {
+                        return true;
+                    }
+                }
+                false
             }
         }
     }

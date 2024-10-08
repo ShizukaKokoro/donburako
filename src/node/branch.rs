@@ -66,7 +66,7 @@ impl IfNode {
 
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
-        Node::new(NodeType::If(self), name)
+        Node::new(NodeType::If(self), name, Choice::All)
     }
 
     pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
@@ -131,7 +131,7 @@ impl FirstChoiceNode {
 
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
-        Node::new(NodeType::FirstChoice(self), name)
+        Node::new(NodeType::FirstChoice(self), name, Choice::Any)
     }
 
     pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {

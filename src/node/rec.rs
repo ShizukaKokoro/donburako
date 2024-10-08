@@ -47,7 +47,7 @@ impl RecursiveNode {
 
     /// ノードに変換
     pub fn to_node(self, name: &'static str) -> Node {
-        Node::new(NodeType::Recursive(self), name)
+        Node::new(NodeType::Recursive(self), name, Choice::Any)
     }
 
     /// エッジの数が正しいかどうか
