@@ -4,7 +4,6 @@
 
 use crate::edge::Edge;
 use crate::node::Node;
-use crate::operator::Operator;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
@@ -23,8 +22,19 @@ pub enum WorkflowError {
 }
 
 /// ワークフローID
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkflowId(Uuid);
+impl WorkflowId {
+    /// 新しいワークフローIDを生成
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+impl Default for WorkflowId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// ワークフロービルダー
 #[derive(Default)]
@@ -111,27 +121,17 @@ impl Workflow {
     pub(crate) fn end_edges(&self) -> &Vec<Arc<Edge>> {
         &self.end_edges
     }
-
-    /// エッジの数が正しいかどうか
-    pub(crate) fn is_edge_count_valid(&self, op: &Operator, wf_id: WorkflowId) -> bool {
-        for node in self.input_to_node.values() {
-            if !node.is_edge_count_valid(op, wf_id) {
-                return false;
-            }
-        }
-        true
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::*;
+    use crate::node::Choice;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn test_workflow_builder() {
-        let node = Arc::new(UserNode::new_test(vec![]).to_node("node"));
+        let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_add_node() {
-        let node = Arc::new(UserNode::new_test(vec![]).to_node("node"));
+        let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
         let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -152,13 +152,13 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_multi_node() {
-        let mut node0 = UserNode::new_test(vec![]);
+        let mut node0 = Node::new_test(vec![], "node0", Choice::All);
         let edge = node0.add_output::<i32>();
-        let node1 = UserNode::new_test(vec![edge.clone()]);
+        let node1 = Node::new_test(vec![edge.clone()], "node1", Choice::All);
         let wf = WorkflowBuilder::default()
-            .add_node(Arc::new(node0.to_node("node0")))
+            .add_node(Arc::new(node0))
             .unwrap()
-            .add_node(Arc::new(node1.to_node("node1")))
+            .add_node(Arc::new(node1))
             .unwrap()
             .build()
             .0;
@@ -168,8 +168,8 @@ mod tests {
     #[test]
     fn test_workflow_get_node() {
         let edge = Arc::new(Edge::new::<i32>());
-        let node0 = UserNode::new_test(vec![edge.clone()]);
-        let node0_rc = Arc::new(node0.to_node("node0"));
+        let node0 = Node::new_test(vec![edge.clone()], "node0", Choice::All);
+        let node0_rc = Arc::new(node0);
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()

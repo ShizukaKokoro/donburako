@@ -27,8 +27,13 @@ pub enum OperatorError {
 pub struct ExecutorId(Uuid);
 impl ExecutorId {
     /// 実行IDの生成
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
+    }
+}
+impl Default for ExecutorId {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -94,16 +99,6 @@ impl Operator {
             executors: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Mutex::new(ExecutableQueue::default())),
         }
-    }
-
-    /// エッジの数が正しいかどうか
-    pub(crate) fn is_edge_count_valid(&self) -> bool {
-        for (wf_id, wf) in self.workflows.iter() {
-            if !wf.is_edge_count_valid(self, *wf_id) {
-                return false;
-            }
-        }
-        true
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -247,7 +242,7 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     /// * `wf_id` - ワークフローID
-    pub(crate) async fn start_workflow(&self, exec_id: ExecutorId, wf_id: WorkflowId) {
+    pub async fn start_workflow(&self, exec_id: ExecutorId, wf_id: WorkflowId) {
         let _ = self
             .executors
             .lock()
@@ -256,7 +251,7 @@ impl Operator {
     }
 
     /// ワークフローの実行終了の待機
-    pub(crate) async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
+    pub async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
         loop {
             let exec = self.executors.lock().await;
             if let Some(State::Running(_)) = exec.get(&exec_id) {
@@ -279,7 +274,7 @@ impl Operator {
     }
 
     /// 実行IDからワークフローIDを取得
-    pub(crate) async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
+    pub async fn get_workflow_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
         let exec = self.executors.lock().await;
         let state = exec.get(&exec_id)?;
         match state {
@@ -289,10 +284,7 @@ impl Operator {
     }
 
     /// ワークフローIDから始点と終点のエッジを取得
-    pub(crate) fn get_start_end_edges(
-        &self,
-        wf_id: &WorkflowId,
-    ) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
+    pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
         let wf = &self.workflows[wf_id];
         (wf.start_edges(), wf.end_edges())
     }
@@ -302,7 +294,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
-    pub(crate) async fn finish_containers(&self, exec_id: ExecutorId) {
+    pub async fn finish_containers(&self, exec_id: ExecutorId) {
         self.containers.lock().await.finish_containers(exec_id);
         let _ = self.executors.lock().await.remove(&exec_id).unwrap();
     }
@@ -311,12 +303,12 @@ impl Operator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::node::*;
+    use crate::node::Choice;
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
+        let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
@@ -344,7 +336,7 @@ mod test {
     #[tokio::test]
     async fn test_operator_get_next_node() {
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(UserNode::new_test(vec![edge.clone()]).to_node("node"));
+        let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
@@ -361,7 +353,7 @@ mod test {
     #[tokio::test]
     async fn test_workflow_wait_finish() {
         let edge = Arc::new(Edge::new::<&str>());
-        let mut node = UserNode::new(
+        let mut node = Node::new(
             vec![edge.clone()],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
@@ -379,11 +371,11 @@ mod test {
                 })
             }),
             false,
+            "node",
+            Choice::All,
         );
         let edge_to = node.add_output::<&str>();
-        let builder = WorkflowBuilder::default()
-            .add_node(Arc::new(node.to_node("node")))
-            .unwrap();
+        let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let wf_id = builder.id();
         let op = Operator::new(vec![builder]);
         let exec_id = ExecutorId::new();
