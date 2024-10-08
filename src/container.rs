@@ -36,7 +36,7 @@ pub enum ContainerError {
 /// コンテナ
 ///
 /// データを格納するためのコンテナ。
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Container {
     data: Option<Box<dyn Any + 'static + Send + Sync>>,
     ty: Option<TypeId>,
@@ -98,6 +98,15 @@ impl Container {
     fn take_anyway(&mut self) {
         let _ = self.data.take();
         let _ = self.ty.take();
+    }
+}
+impl std::fmt::Debug for Container {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.has_data() {
+            write!(f, "Container {{ data: Some(Any {{ .. }}) }}")
+        } else {
+            write!(f, "Container {{ data: None }}")
+        }
     }
 }
 impl Drop for Container {
