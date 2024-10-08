@@ -273,7 +273,7 @@ impl Operator {
     }
 
     /// ワークフローの実行終了の待機
-    pub async fn wait_finish(&self, exec_id: ExecutorId, duration: u64) {
+    pub async fn wait_finish(&self, exec_id: ExecutorId) {
         loop {
             let exec = self.executors.lock().await;
             if let Some(State::Running(_)) = exec.get(&exec_id) {
@@ -281,7 +281,7 @@ impl Operator {
                 break;
             }
             drop(exec);
-            tokio::time::sleep(tokio::time::Duration::from_millis(duration)).await;
+            tokio::time::sleep(tokio::time::Duration::from_micros(0)).await;
         }
     }
 
@@ -400,7 +400,7 @@ mod test {
         assert!(!op.is_finished(exec_id).await);
         assert!(op.get_container(edge_to.clone(), exec_id).await.is_none());
         f.await;
-        op.wait_finish(exec_id, 10).await;
+        op.wait_finish(exec_id).await;
         assert!(op.get_container(edge_to, exec_id).await.is_some());
         assert!(op.is_finished(exec_id).await);
     }
