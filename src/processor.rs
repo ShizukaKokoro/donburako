@@ -134,7 +134,11 @@ impl ProcessorBuilder {
                         {
                             let wf_id = op.get_wf_id(exec_id).await.unwrap();
                             let key = (wf_id, exec_id);
-                            let _ = time.entry(key).or_insert_with(std::time::Instant::now);
+                            let len = time.len();
+                            let _ = time.entry(key).or_insert_with(|| {
+                                println!("time(start): {:?}", len);
+                                std::time::Instant::now()
+                            });
                         }
                         let op_clone = op.clone();
                         if node.is_blocking() {
@@ -186,8 +190,14 @@ impl ProcessorBuilder {
                         #[cfg(feature = "dev")]
                         {
                             let wf_id = op.get_wf_id(*exec_id).await.unwrap();
+                            println!("time(end): {:?}", time.len());
                             let inst = time.remove(&(wf_id, *exec_id)).unwrap();
-                            log::info!("{:?} is finished in {:?}", wf_id, inst.elapsed());
+                            log::info!(
+                                "{:?}({:?}) is finished in {:?}",
+                                wf_id,
+                                exec_id,
+                                inst.elapsed()
+                            );
                         }
                         let res = handle.await.unwrap().unwrap();
                         debug!("Task is finished: {:?}", res);
