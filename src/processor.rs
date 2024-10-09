@@ -136,6 +136,7 @@ impl ProcessorBuilder {
                             let key = (wf_id, exec_id);
                             let len = time.len();
                             let _ = time.entry(key).or_insert_with(|| {
+                                println!("insert key: {:?}", key);
                                 println!("time(start): {:?}", len);
                                 std::time::Instant::now()
                             });
@@ -186,11 +187,13 @@ impl ProcessorBuilder {
                     debug!("Check running tasks");
                 }
                 for (key, (handle, exec_id)) in handlers.iter() {
-                    if op.is_finished(*exec_id).await {
+                    let (is_finished, had_tx) = op.is_finished(*exec_id).await;
+                    if is_finished {
                         #[cfg(feature = "dev")]
                         {
                             let wf_id = op.get_wf_id(*exec_id).await.unwrap();
                             println!("time(end): {:?}", time.len());
+                            println!("remove key: {:?}", (wf_id, &exec_id));
                             let inst = time.remove(&(wf_id, *exec_id)).unwrap();
                             log::info!(
                                 "{:?}({:?}) is finished in {:?}",
@@ -201,6 +204,9 @@ impl ProcessorBuilder {
                         }
                         let res = handle.await.unwrap().unwrap();
                         debug!("Task is finished: {:?}", res);
+                        if had_tx {
+                            op.finish_containers(*exec_id).await;
+                        }
                         finished.push(key);
                     }
                 }

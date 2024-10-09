@@ -66,9 +66,13 @@ impl ExecutableQueue {
 #[derive(Debug)]
 enum State {
     /// 実行中
+    ///
+    /// ワークフローIDと終了通知用のチャンネル
     Running(WorkflowId, Option<oneshot::Sender<()>>),
     /// 終了
-    Finished(WorkflowId),
+    ///
+    /// ワークフローIDと終了通知用のチャンネルがあったかどうか
+    Finished(WorkflowId, bool),
 }
 
 /// オペレーター
@@ -111,7 +115,7 @@ impl Operator {
         let wf_id = if let Some(state) = exec.get(&exec_id) {
             match state {
                 State::Running(wf_id, _) => wf_id,
-                State::Finished(wf_id) => wf_id,
+                State::Finished(wf_id, _) => wf_id,
             }
         } else {
             return Err(OperatorError::NotStarted);
@@ -131,7 +135,7 @@ impl Operator {
         exec_id: ExecutorId,
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
     ) {
-        let wf_id = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
+        let (wf_id, had_tx) = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
             for end in self.workflows[&wf_id].end_edges() {
                 if !self
                     .containers
@@ -143,19 +147,33 @@ impl Operator {
                     return;
                 }
             }
+            let had_tx = tx.is_some();
             if let Some(tx) = tx {
                 let _ = tx.send(());
             }
-            wf_id
+            (wf_id, had_tx)
         } else {
             return;
         };
-        let _ = exec.insert(exec_id, State::Finished(wf_id));
+        let _ = exec.insert(exec_id, State::Finished(wf_id, had_tx));
     }
 
-    pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
+    /// ワークフローの終了確認
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// 0: ワークフローが終了していない場合は false、終了している場合は true
+    /// 1: 終了通知用のチャンネルがある場合は true、ない場合は false
+    pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> (bool, bool) {
         let exec = self.executors.lock().await;
-        matches!(exec.get(&exec_id), Some(State::Finished(_)))
+        match exec.get(&exec_id) {
+            Some(State::Finished(_, had_tx)) => (true, *had_tx),
+            _ => (false, false),
+        }
     }
 
     /// 新しいコンテナの追加
@@ -279,7 +297,7 @@ impl Operator {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
-    pub async fn finish_containers(&self, exec_id: ExecutorId) {
+    pub(crate) async fn finish_containers(&self, exec_id: ExecutorId) {
         self.containers.lock().await.finish_containers(exec_id);
         let _ = self.executors.lock().await.remove(&exec_id).unwrap();
     }
@@ -290,7 +308,7 @@ impl Operator {
         let exec = self.executors.lock().await;
         match exec.get(&exec_id) {
             Some(State::Running(wf_id, _)) => Some(*wf_id),
-            Some(State::Finished(wf_id)) => Some(*wf_id),
+            Some(State::Finished(wf_id, _)) => Some(*wf_id),
             _ => None,
         }
     }
@@ -388,11 +406,15 @@ mod test {
         op.add_new_container(edge, exec_id, "test").await.unwrap();
         let node = op.get_next_node().await.unwrap().0;
         let f = node.run(&op, exec_id);
-        assert!(!op.is_finished(exec_id).await);
+        let (is_finished, had_tx) = op.is_finished(exec_id).await;
+        assert!(!is_finished);
+        assert!(!had_tx);
         assert!(op.get_container(edge_to.clone(), exec_id).await.is_none());
         f.await;
         rx.await.unwrap();
         assert!(op.get_container(edge_to, exec_id).await.is_some());
-        assert!(op.is_finished(exec_id).await);
+        let (is_finished, had_tx) = op.is_finished(exec_id).await;
+        assert!(is_finished);
+        assert!(had_tx);
     }
 }
