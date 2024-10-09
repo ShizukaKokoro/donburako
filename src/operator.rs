@@ -196,8 +196,19 @@ impl Operator {
     /// # Returns
     ///
     /// コンテナ
-    pub async fn get_container(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> Option<Container> {
-        self.containers.lock().await.get_container(edge, exec_id)
+    pub async fn get_container(
+        &self,
+        edge: &Vec<Arc<Edge>>,
+        exec_id: ExecutorId,
+    ) -> VecDeque<Container> {
+        let mut containers = VecDeque::new();
+        let mut cons_lock = self.containers.lock().await;
+        for e in edge {
+            if let Some(container) = cons_lock.get_container(e.clone(), exec_id) {
+                containers.push_back(container);
+            }
+        }
+        containers
     }
 
     /// 既存のコンテナの追加
@@ -425,10 +436,8 @@ mod test {
             vec![edge.clone()],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
-                    let mut con = op
-                        .get_container(self_.inputs()[0].clone(), exec_id)
-                        .await
-                        .unwrap();
+                    let mut cons = op.get_container(self_.inputs(), exec_id).await;
+                    let mut con = cons.pop_front().unwrap();
                     let _: &str = con.take().unwrap();
                     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
                     let mut con_clone = con.clone_container().unwrap();
@@ -455,10 +464,13 @@ mod test {
         let f = node.run(&op, exec_id);
         let is_finished = op.is_finished(exec_id).await;
         assert!(!is_finished);
-        assert!(op.get_container(edge_to.clone(), exec_id).await.is_none());
+        assert!(op
+            .get_container(&vec![edge_to.clone()], exec_id)
+            .await
+            .is_empty());
         f.await;
         rx.await.unwrap();
-        assert!(op.get_container(edge_to, exec_id).await.is_some());
+        assert_eq!(op.get_container(&vec![edge_to], exec_id).await.len(), 1);
         let is_finished = op.is_finished(exec_id).await;
         assert!(is_finished);
     }
