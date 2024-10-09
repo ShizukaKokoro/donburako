@@ -105,7 +105,137 @@ impl Operator {
         }
     }
 
+    /// 実行IDからワークフローIDを取得
+    ///
+    /// 実行IDに対応するワークフローが存在しない場合は None を返す。
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// ワークフローID
+    pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
+        let exec = self.executors.lock().await;
+        match exec.get(&exec_id) {
+            Some(State::Running(wf_id, _)) => Some(*wf_id),
+            Some(State::Finished(wf_id)) => Some(*wf_id),
+            _ => None,
+        }
+    }
+
+    /// ワークフローIDから始点と終点のエッジを取得
+    ///
+    /// # Arguments
+    ///
+    /// * `wf_id` - ワークフローID
+    ///
+    /// # Returns
+    ///
+    /// 0: 始点のエッジ
+    /// 1: 終点のエッジ
+    pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
+        let wf = &self.workflows[wf_id];
+        (wf.start_edges(), wf.end_edges())
+    }
+
+    /// ワークフローの実行開始
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    /// * `wf_id` - ワークフローID
+    /// * `tx` - 終了通知用のチャンネル
+    pub async fn start_workflow(
+        &self,
+        exec_id: ExecutorId,
+        wf_id: WorkflowId,
+        tx: Option<oneshot::Sender<()>>,
+    ) {
+        let _ = self
+            .executors
+            .lock()
+            .await
+            .insert(exec_id, State::Running(wf_id, tx));
+    }
+
+    /// 新しいコンテナの追加
+    ///
+    /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    /// * `data` - データ
+    ///
+    /// # Returns
+    ///
+    /// 成功した場合は Ok(())
+    pub(crate) async fn add_new_container<T: 'static + Send + Sync>(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+        data: T,
+    ) -> Result<(), OperatorError> {
+        self.containers
+            .lock()
+            .await
+            .add_new_container(edge.clone(), exec_id, data)?;
+        self.enqueue_node_if_executable(&edge, exec_id).await
+    }
+
+    /// コンテナの取得
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// コンテナ
+    pub async fn get_container(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> Option<Container> {
+        self.containers.lock().await.get_container(edge, exec_id)
+    }
+
+    /// 既存のコンテナの追加
+    ///
+    /// エッジの移動時に、既存のコンテナを追加する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    /// * `container` - コンテナ
+    ///
+    /// # Returns
+    ///
+    /// 成功した場合は Ok(())
+    pub async fn add_container(
+        &self,
+        edge: Arc<Edge>,
+        exec_id: ExecutorId,
+        container: Container,
+    ) -> Result<(), OperatorError> {
+        self.containers
+            .lock()
+            .await
+            .add_container(edge.clone(), exec_id, container)?;
+        self.enqueue_node_if_executable(&edge, exec_id).await
+    }
+
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// 成功した場合は Ok(())
     async fn enqueue_node_if_executable(
         &self,
         edge: &Arc<Edge>,
@@ -121,13 +251,38 @@ impl Operator {
             return Err(OperatorError::NotStarted);
         };
         if let Some(node) = self.workflows[wf_id].get_node(edge) {
-            if self.check_node_executable(&node, exec_id).await {
+            if self
+                .containers
+                .lock()
+                .await
+                .check_node_executable(&node, exec_id)
+            {
                 self.queue.lock().await.push(node, exec_id);
             }
         } else {
             self.check_finish(exec_id, &mut exec).await;
         }
         Ok(())
+    }
+
+    /// 実行可能なノードが存在するか確認する
+    ///
+    /// # Returns
+    ///
+    /// 実行可能なノードが存在する場合は true、存在しない場合は false
+    pub(crate) async fn has_executable_node(&self) -> bool {
+        !self.queue.lock().await.queue.is_empty()
+    }
+
+    /// 次に実行するノードを取得する
+    ///
+    /// 実行可能なノードが存在しない場合は None を返す。
+    ///
+    /// # Returns
+    ///
+    /// 実行可能なノードと実行ID
+    pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
+        self.queue.lock().await.pop()
     }
 
     async fn check_finish(
@@ -171,123 +326,15 @@ impl Operator {
         matches!(exec.get(&exec_id), Some(State::Finished(_)))
     }
 
-    /// 新しいコンテナの追加
-    ///
-    /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
-    ///
-    /// # Arguments
-    ///
-    /// * `edge` - エッジ
-    /// * `exec_id` - 実行ID
-    /// * `data` - データ
-    pub(crate) async fn add_new_container<T: 'static + Send + Sync>(
-        &self,
-        edge: Arc<Edge>,
-        exec_id: ExecutorId,
-        data: T,
-    ) -> Result<(), OperatorError> {
-        self.containers
-            .lock()
-            .await
-            .add_new_container(edge.clone(), exec_id, data)?;
-        self.enqueue_node_if_executable(&edge, exec_id).await
-    }
-
-    /// ノードが実行できるか確認する
-    ///
-    /// ノードは全ての入力エッジに対して、コンテナが格納されることで実行可能となる。
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - ノード
-    /// * `exec_id` - 実行ID
-    ///
-    /// # Returns
-    ///
-    /// 実行可能な場合は true、そうでない場合は false
-    pub(crate) async fn check_node_executable(
-        &self,
-        node: &Arc<Node>,
-        exec_id: ExecutorId,
-    ) -> bool {
-        self.containers
-            .lock()
-            .await
-            .check_node_executable(node, exec_id)
-    }
-
-    /// コンテナの取得
-    ///
-    /// # Arguments
-    ///
-    /// * `edge` - エッジ
-    /// * `exec_id` - 実行ID
-    ///
-    /// # Returns
-    ///
-    /// コンテナ
-    pub async fn get_container(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> Option<Container> {
-        self.containers.lock().await.get_container(edge, exec_id)
-    }
-
-    /// 既存のコンテナの追加
-    ///
-    /// エッジの移動時に、既存のコンテナを追加する。
-    ///
-    /// # Arguments
-    ///
-    /// * `edge` - エッジ
-    /// * `exec_id` - 実行ID
-    /// * `container` - コンテナ
-    pub async fn add_container(
-        &self,
-        edge: Arc<Edge>,
-        exec_id: ExecutorId,
-        container: Container,
-    ) -> Result<(), OperatorError> {
-        self.containers
-            .lock()
-            .await
-            .add_container(edge.clone(), exec_id, container)?;
-        self.enqueue_node_if_executable(&edge, exec_id).await
-    }
-
-    /// ワークフローの実行開始
-    ///
-    /// # Arguments
-    ///
-    /// * `exec_id` - 実行ID
-    /// * `wf_id` - ワークフローID
-    pub async fn start_workflow(
-        &self,
-        exec_id: ExecutorId,
-        wf_id: WorkflowId,
-        tx: Option<oneshot::Sender<()>>,
-    ) {
-        let _ = self
-            .executors
-            .lock()
-            .await
-            .insert(exec_id, State::Running(wf_id, tx));
-    }
-
-    /// 次に実行するノードを取得する
-    pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
-        self.queue.lock().await.pop()
-    }
-
-    /// 実行可能なノードが存在するか確認する
-    pub(crate) async fn has_executable_node(&self) -> bool {
-        !self.queue.lock().await.queue.is_empty()
-    }
-
-    /// ワークフローIDから始点と終点のエッジを取得
-    pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
-        let wf = &self.workflows[wf_id];
-        (wf.start_edges(), wf.end_edges())
-    }
-
     /// 終了したワークフローから全てのコンテナがなくなっているか確認する
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// 全てのコンテナがなくなっている場合は true、残っている場合は false
     pub(crate) async fn check_all_containers_taken(&self, exec_id: ExecutorId) -> bool {
         let (_, end) = self.get_start_end_edges(&self.get_wf_id(exec_id).await.unwrap());
         for edge in end {
@@ -311,16 +358,6 @@ impl Operator {
     pub(crate) async fn finish_containers(&self, exec_id: ExecutorId) {
         self.containers.lock().await.finish_containers(exec_id);
         let _ = self.executors.lock().await.remove(&exec_id).unwrap();
-    }
-
-    /// 実行IDからワークフローIDを取得する
-    pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
-        let exec = self.executors.lock().await;
-        match exec.get(&exec_id) {
-            Some(State::Running(wf_id, _)) => Some(*wf_id),
-            Some(State::Finished(wf_id)) => Some(*wf_id),
-            _ => None,
-        }
     }
 }
 
