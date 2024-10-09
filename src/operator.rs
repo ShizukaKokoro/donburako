@@ -264,20 +264,17 @@ impl Operator {
         };
         let mut finish = false;
         let mut queue_lock = self.queue.lock().await;
+        let cons_lock = self.containers.lock().await;
         for e in edge {
             if let Some(node) = self.workflows[wf_id].get_node(e) {
-                if self
-                    .containers
-                    .lock()
-                    .await
-                    .check_node_executable(&node, exec_id)
-                {
+                if cons_lock.check_node_executable(&node, exec_id) {
                     queue_lock.push(node, exec_id);
                 }
             } else {
                 finish = true;
             }
         }
+        drop(cons_lock);
         if finish {
             self.check_finish(exec_id, &mut exec).await;
         }
