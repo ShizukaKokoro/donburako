@@ -179,11 +179,10 @@ impl Operator {
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), OperatorError> {
-        self.containers
-            .lock()
+        let mut cons_lock = self.containers.lock().await;
+        cons_lock.add_new_container(edge.clone(), exec_id, data)?;
+        self.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
             .await
-            .add_new_container(edge.clone(), exec_id, data)?;
-        self.enqueue_node_if_executable(&vec![edge], exec_id).await
     }
 
     /// コンテナの取得
@@ -234,8 +233,8 @@ impl Operator {
         for (e, c) in edge.iter().zip(container) {
             cons_lock.add_container(e.clone(), exec_id, c)?;
         }
-        drop(cons_lock);
-        self.enqueue_node_if_executable(edge, exec_id).await
+        self.enqueue_node_if_executable(edge, exec_id, &mut cons_lock)
+            .await
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -252,6 +251,7 @@ impl Operator {
         &self,
         edge: &Vec<Arc<Edge>>,
         exec_id: ExecutorId,
+        cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) -> Result<(), OperatorError> {
         let mut exec = self.executors.lock().await;
         let wf_id = if let Some(state) = exec.get(&exec_id) {
@@ -264,7 +264,6 @@ impl Operator {
         };
         let mut finish = false;
         let mut queue_lock = self.queue.lock().await;
-        let cons_lock = self.containers.lock().await;
         for e in edge {
             if let Some(node) = self.workflows[wf_id].get_node(e) {
                 if cons_lock.check_node_executable(&node, exec_id) {
@@ -274,9 +273,8 @@ impl Operator {
                 finish = true;
             }
         }
-        drop(cons_lock);
         if finish {
-            self.check_finish(exec_id, &mut exec).await;
+            self.check_finish(exec_id, &mut exec, cons_lock);
         }
         Ok(())
     }
@@ -301,13 +299,13 @@ impl Operator {
         self.queue.lock().await.pop()
     }
 
-    async fn check_finish(
+    fn check_finish(
         &self,
         exec_id: ExecutorId,
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
+        cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) {
         let wf_id = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
-            let cons_lock = self.containers.lock().await;
             for end in self.workflows[&wf_id].end_edges() {
                 if !cons_lock.check_edge_exists(end.clone(), exec_id) {
                     assert!(exec.insert(exec_id, State::Running(wf_id, tx)).is_none());
@@ -390,7 +388,8 @@ mod test {
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        op.enqueue_node_if_executable(&vec![edge], exec_id)
+        let mut cons_lock = op.containers.lock().await;
+        op.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
             .await
             .unwrap();
         let queue = op.queue.lock().await;
@@ -426,7 +425,8 @@ mod test {
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        op.enqueue_node_if_executable(&vec![edge], exec_id)
+        let mut cons_lock = op.containers.lock().await;
+        op.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
             .await
             .unwrap();
         let next = op.get_next_node().await.unwrap();
