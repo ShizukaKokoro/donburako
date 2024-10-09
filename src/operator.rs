@@ -263,6 +263,7 @@ impl Operator {
             return Err(OperatorError::NotStarted);
         };
         let mut finish = false;
+        let mut queue_lock = self.queue.lock().await;
         for e in edge {
             if let Some(node) = self.workflows[wf_id].get_node(e) {
                 if self
@@ -271,7 +272,7 @@ impl Operator {
                     .await
                     .check_node_executable(&node, exec_id)
                 {
-                    self.queue.lock().await.push(node, exec_id);
+                    queue_lock.push(node, exec_id);
                 }
             } else {
                 finish = true;
