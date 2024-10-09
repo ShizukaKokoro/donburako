@@ -183,7 +183,7 @@ impl Operator {
             .lock()
             .await
             .add_new_container(edge.clone(), exec_id, data)?;
-        self.enqueue_node_if_executable(&edge, exec_id).await
+        self.enqueue_node_if_executable(&vec![edge], exec_id).await
     }
 
     /// コンテナの取得
@@ -235,10 +235,7 @@ impl Operator {
             cons_lock.add_container(e.clone(), exec_id, c)?;
         }
         drop(cons_lock);
-        for e in edge {
-            self.enqueue_node_if_executable(e, exec_id).await?;
-        }
-        Ok(())
+        self.enqueue_node_if_executable(edge, exec_id).await
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -253,7 +250,7 @@ impl Operator {
     /// 成功した場合は Ok(())
     async fn enqueue_node_if_executable(
         &self,
-        edge: &Arc<Edge>,
+        edge: &Vec<Arc<Edge>>,
         exec_id: ExecutorId,
     ) -> Result<(), OperatorError> {
         let mut exec = self.executors.lock().await;
@@ -265,16 +262,22 @@ impl Operator {
         } else {
             return Err(OperatorError::NotStarted);
         };
-        if let Some(node) = self.workflows[wf_id].get_node(edge) {
-            if self
-                .containers
-                .lock()
-                .await
-                .check_node_executable(&node, exec_id)
-            {
-                self.queue.lock().await.push(node, exec_id);
+        let mut finish = false;
+        for e in edge {
+            if let Some(node) = self.workflows[wf_id].get_node(e) {
+                if self
+                    .containers
+                    .lock()
+                    .await
+                    .check_node_executable(&node, exec_id)
+                {
+                    self.queue.lock().await.push(node, exec_id);
+                }
+            } else {
+                finish = true;
             }
-        } else {
+        }
+        if finish {
             self.check_finish(exec_id, &mut exec).await;
         }
         Ok(())
@@ -393,7 +396,9 @@ mod test {
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        op.enqueue_node_if_executable(&edge, exec_id).await.unwrap();
+        op.enqueue_node_if_executable(&vec![edge], exec_id)
+            .await
+            .unwrap();
         let queue = op.queue.lock().await;
         let expected = VecDeque::from(vec![(node, exec_id)]);
         assert_eq!(queue.queue, expected);
@@ -427,7 +432,9 @@ mod test {
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        op.enqueue_node_if_executable(&edge, exec_id).await.unwrap();
+        op.enqueue_node_if_executable(&vec![edge], exec_id)
+            .await
+            .unwrap();
         let next = op.get_next_node().await.unwrap();
         assert_eq!(next, (node, exec_id));
     }
