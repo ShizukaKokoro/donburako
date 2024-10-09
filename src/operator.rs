@@ -71,8 +71,8 @@ enum State {
     Running(WorkflowId, Option<oneshot::Sender<()>>),
     /// 終了
     ///
-    /// ワークフローIDと終了通知用のチャンネルがあったかどうか
-    Finished(WorkflowId, bool),
+    /// ワークフローID
+    Finished(WorkflowId),
 }
 
 /// オペレーター
@@ -115,7 +115,7 @@ impl Operator {
         let wf_id = if let Some(state) = exec.get(&exec_id) {
             match state {
                 State::Running(wf_id, _) => wf_id,
-                State::Finished(wf_id, _) => wf_id,
+                State::Finished(wf_id) => wf_id,
             }
         } else {
             return Err(OperatorError::NotStarted);
@@ -135,7 +135,7 @@ impl Operator {
         exec_id: ExecutorId,
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
     ) {
-        let (wf_id, had_tx) = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
+        let wf_id = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
             for end in self.workflows[&wf_id].end_edges() {
                 if !self
                     .containers
@@ -147,15 +147,14 @@ impl Operator {
                     return;
                 }
             }
-            let had_tx = tx.is_some();
             if let Some(tx) = tx {
                 let _ = tx.send(());
             }
-            (wf_id, had_tx)
+            wf_id
         } else {
             return;
         };
-        let _ = exec.insert(exec_id, State::Finished(wf_id, had_tx));
+        let _ = exec.insert(exec_id, State::Finished(wf_id));
     }
 
     /// ワークフローの終了確認
@@ -166,14 +165,10 @@ impl Operator {
     ///
     /// # Returns
     ///
-    /// 0: ワークフローが終了していない場合は false、終了している場合は true
-    /// 1: 終了通知用のチャンネルがある場合は true、ない場合は false
-    pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> (bool, bool) {
+    /// ワークフローが終了していない場合は false、終了している場合は true
+    pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         let exec = self.executors.lock().await;
-        match exec.get(&exec_id) {
-            Some(State::Finished(_, had_tx)) => (true, *had_tx),
-            _ => (false, false),
-        }
+        matches!(exec.get(&exec_id), Some(State::Finished(_)))
     }
 
     /// 新しいコンテナの追加
@@ -292,6 +287,22 @@ impl Operator {
         (wf.start_edges(), wf.end_edges())
     }
 
+    /// 終了したワークフローから全てのコンテナがなくなっているか確認する
+    pub(crate) async fn check_all_containers_taken(&self, exec_id: ExecutorId) -> bool {
+        let (_, end) = self.get_start_end_edges(&self.get_wf_id(exec_id).await.unwrap());
+        for edge in end {
+            if self
+                .containers
+                .lock()
+                .await
+                .check_edge_exists(edge.clone(), exec_id)
+            {
+                return false;
+            }
+        }
+        true
+    }
+
     /// 特定の実行IDに対応するコンテナを全て終了処理する
     ///
     /// # Arguments
@@ -303,12 +314,11 @@ impl Operator {
     }
 
     /// 実行IDからワークフローIDを取得する
-    #[cfg(feature = "dev")]
     pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
         let exec = self.executors.lock().await;
         match exec.get(&exec_id) {
             Some(State::Running(wf_id, _)) => Some(*wf_id),
-            Some(State::Finished(wf_id, _)) => Some(*wf_id),
+            Some(State::Finished(wf_id)) => Some(*wf_id),
             _ => None,
         }
     }
@@ -406,15 +416,13 @@ mod test {
         op.add_new_container(edge, exec_id, "test").await.unwrap();
         let node = op.get_next_node().await.unwrap().0;
         let f = node.run(&op, exec_id);
-        let (is_finished, had_tx) = op.is_finished(exec_id).await;
+        let is_finished = op.is_finished(exec_id).await;
         assert!(!is_finished);
-        assert!(!had_tx);
         assert!(op.get_container(edge_to.clone(), exec_id).await.is_none());
         f.await;
         rx.await.unwrap();
         assert!(op.get_container(edge_to, exec_id).await.is_some());
-        let (is_finished, had_tx) = op.is_finished(exec_id).await;
+        let is_finished = op.is_finished(exec_id).await;
         assert!(is_finished);
-        assert!(had_tx);
     }
 }
