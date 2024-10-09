@@ -226,15 +226,19 @@ impl Operator {
     /// 成功した場合は Ok(())
     pub async fn add_container(
         &self,
-        edge: Arc<Edge>,
+        edge: &Vec<Arc<Edge>>,
         exec_id: ExecutorId,
-        container: Container,
+        container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
-        self.containers
-            .lock()
-            .await
-            .add_container(edge.clone(), exec_id, container)?;
-        self.enqueue_node_if_executable(&edge, exec_id).await
+        let mut cons_lock = self.containers.lock().await;
+        for (e, c) in edge.iter().zip(container) {
+            cons_lock.add_container(e.clone(), exec_id, c)?;
+        }
+        drop(cons_lock);
+        for e in edge {
+            self.enqueue_node_if_executable(e, exec_id).await?;
+        }
+        Ok(())
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -440,9 +444,11 @@ mod test {
                     let mut con = cons.pop_front().unwrap();
                     let _: &str = con.take().unwrap();
                     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                    let mut output_cons = VecDeque::new();
                     let mut con_clone = con.clone_container().unwrap();
                     con_clone.store("test");
-                    op.add_container(self_.outputs()[0].clone(), exec_id, con_clone)
+                    output_cons.push_back(con_clone);
+                    op.add_container(self_.outputs(), exec_id, output_cons)
                         .await
                         .unwrap();
                 })
