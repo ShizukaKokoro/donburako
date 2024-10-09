@@ -108,6 +108,11 @@ impl ProcessorBuilder {
         debug!("Start building processor");
         let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
+        #[cfg(feature = "dev")]
+        let mut time: std::collections::HashMap<
+            (WorkflowId, ExecutorId),
+            std::time::Instant,
+        > = std::collections::HashMap::new();
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
@@ -125,6 +130,12 @@ impl ProcessorBuilder {
                 while !handlers.is_full() {
                     let (handle, exec_id) = if let Some((node, exec_id)) = op.get_next_node().await
                     {
+                        #[cfg(feature = "dev")]
+                        {
+                            let wf_id = op.get_wf_id(exec_id).await.unwrap();
+                            let key = (wf_id, exec_id);
+                            let _ = time.entry(key).or_insert_with(std::time::Instant::now);
+                        }
                         let op_clone = op.clone();
                         if node.is_blocking() {
                             let rt_handle = Handle::current();
@@ -172,6 +183,12 @@ impl ProcessorBuilder {
                 }
                 for (key, (handle, exec_id)) in handlers.iter() {
                     if op.is_finished(*exec_id).await {
+                        #[cfg(feature = "dev")]
+                        {
+                            let wf_id = op.get_wf_id(*exec_id).await.unwrap();
+                            let inst = time.remove(&(wf_id, *exec_id)).unwrap();
+                            log::info!("{:?} is finished in {:?}", wf_id, inst.elapsed());
+                        }
                         let res = handle.await.unwrap().unwrap();
                         debug!("Task is finished: {:?}", res);
                         finished.push(key);

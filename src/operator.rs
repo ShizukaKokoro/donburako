@@ -79,8 +79,6 @@ pub struct Operator {
     workflows: Arc<HashMap<WorkflowId, Workflow>>,
     containers: Arc<Mutex<ContainerMap>>,
     executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
-    #[cfg(feature = "dev")]
-    time: Arc<Mutex<HashMap<(WorkflowId, ExecutorId), std::time::Instant>>>,
     queue: Arc<Mutex<ExecutableQueue>>,
 }
 impl Operator {
@@ -99,25 +97,8 @@ impl Operator {
             workflows: Arc::new(workflows),
             containers: Arc::new(Mutex::new(ContainerMap::default())),
             executors: Arc::new(Mutex::new(HashMap::new())),
-            #[cfg(feature = "dev")]
-            time: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Mutex::new(ExecutableQueue::default())),
         }
-    }
-
-    #[cfg(feature = "dev")]
-    pub(crate) async fn start_timer(&self, wf_id: WorkflowId, exec_id: ExecutorId) {
-        let _ = self
-            .time
-            .lock()
-            .await
-            .insert((wf_id, exec_id), std::time::Instant::now());
-    }
-
-    #[cfg(feature = "dev")]
-    pub(crate) async fn stop_timer(&self, wf_id: WorkflowId, exec_id: ExecutorId) {
-        let time = self.time.lock().await.remove(&(wf_id, exec_id)).unwrap();
-        log::info!("{:?} is finished in {:?}", wf_id, time.elapsed());
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -169,8 +150,6 @@ impl Operator {
         } else {
             return;
         };
-        #[cfg(feature = "dev")]
-        self.stop_timer(wf_id, exec_id).await;
         let _ = exec.insert(exec_id, State::Finished(wf_id));
     }
 
@@ -272,8 +251,6 @@ impl Operator {
         wf_id: WorkflowId,
         tx: Option<oneshot::Sender<()>>,
     ) {
-        #[cfg(feature = "dev")]
-        self.start_timer(wf_id, exec_id).await;
         let _ = self
             .executors
             .lock()
@@ -305,6 +282,17 @@ impl Operator {
     pub async fn finish_containers(&self, exec_id: ExecutorId) {
         self.containers.lock().await.finish_containers(exec_id);
         let _ = self.executors.lock().await.remove(&exec_id).unwrap();
+    }
+
+    /// 実行IDからワークフローIDを取得する
+    #[cfg(feature = "dev")]
+    pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
+        let exec = self.executors.lock().await;
+        match exec.get(&exec_id) {
+            Some(State::Running(wf_id, _)) => Some(*wf_id),
+            Some(State::Finished(wf_id)) => Some(*wf_id),
+            _ => None,
+        }
     }
 }
 
