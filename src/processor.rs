@@ -199,7 +199,7 @@ impl ProcessorBuilder {
                         let res = handle.await.unwrap().unwrap();
                         debug!("Task is finished: {:?}", res);
                         if op.check_all_containers_taken(*exec_id).await {
-                            op.finish_containers(*exec_id).await;
+                            op.finish_workflow_by_execute_id(*exec_id).await;
                         }
                         finished.push(key);
                     }

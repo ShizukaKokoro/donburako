@@ -360,14 +360,14 @@ impl Operator {
         true
     }
 
-    /// 特定の実行IDに対応するコンテナを全て終了処理する
+    /// 実行IDに対応するワークフローの終了処理
     ///
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
-    pub(crate) async fn finish_containers(&self, exec_id: ExecutorId) {
+    pub async fn finish_workflow_by_execute_id(&self, exec_id: ExecutorId) {
         self.containers.lock().await.finish_containers(exec_id);
-        let _ = self.executors.lock().await.remove(&exec_id).unwrap();
+        let _ = self.executors.lock().await.remove(&exec_id);
     }
 }
 
