@@ -307,13 +307,9 @@ impl Operator {
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
     ) {
         let wf_id = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
+            let cons_lock = self.containers.lock().await;
             for end in self.workflows[&wf_id].end_edges() {
-                if !self
-                    .containers
-                    .lock()
-                    .await
-                    .check_edge_exists(end.clone(), exec_id)
-                {
+                if !cons_lock.check_edge_exists(end.clone(), exec_id) {
                     assert!(exec.insert(exec_id, State::Running(wf_id, tx)).is_none());
                     return;
                 }
