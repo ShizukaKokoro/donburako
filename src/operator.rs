@@ -27,7 +27,7 @@ pub enum OperatorError {
 pub struct ExecutorId(Uuid);
 impl ExecutorId {
     /// 実行IDの生成
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }
@@ -389,7 +389,7 @@ mod test {
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
         let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
-        let exec_id = ExecutorId::new();
+        let exec_id = ExecutorId::default();
         op.start_workflow(exec_id, wf_id, None).await;
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
@@ -406,7 +406,7 @@ mod test {
     #[tokio::test]
     async fn test_operator_start_workflow() {
         let op = Operator::new(vec![]);
-        let exec_id = ExecutorId::new();
+        let exec_id = ExecutorId::default();
         let wf_id = WorkflowId::new("test");
         op.start_workflow(exec_id, wf_id, None).await;
         let executors = op.executors.lock().await;
@@ -426,7 +426,7 @@ mod test {
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
         let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
         let op = Operator::new(vec![builder]);
-        let exec_id = ExecutorId::new();
+        let exec_id = ExecutorId::default();
         op.start_workflow(exec_id, wf_id, None).await;
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
@@ -469,7 +469,7 @@ mod test {
             .add_node(Arc::new(node))
             .unwrap();
         let op = Operator::new(vec![builder]);
-        let exec_id = ExecutorId::new();
+        let exec_id = ExecutorId::default();
         let (tx, rx) = oneshot::channel();
         op.start_workflow(exec_id, wf_id, Some(tx)).await;
         op.add_new_container(edge, exec_id, "test").await.unwrap();
