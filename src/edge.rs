@@ -26,7 +26,7 @@ impl Edge {
     }
 
     /// 型のチェック
-    pub(crate) fn check_type<T: 'static + Send + Sync>(&self) -> bool {
+    pub fn check_type<T: 'static + Send + Sync>(&self) -> bool {
         self.ty == TypeId::of::<T>()
     }
 }
