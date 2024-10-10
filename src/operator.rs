@@ -338,6 +338,8 @@ impl Operator {
 
     /// 終了したワークフローから全てのコンテナがなくなっているか確認する
     ///
+    /// 実行が終了した実行IDを指定すると false を返す。
+    ///
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
@@ -346,18 +348,22 @@ impl Operator {
     ///
     /// 全てのコンテナがなくなっている場合は true、残っている場合は false
     pub(crate) async fn check_all_containers_taken(&self, exec_id: ExecutorId) -> bool {
-        let (_, end) = self.get_start_end_edges(&self.get_wf_id(exec_id).await.unwrap());
-        for edge in end {
-            if self
-                .containers
-                .lock()
-                .await
-                .check_edge_exists(edge.clone(), exec_id)
-            {
-                return false;
+        if let Some(wf_id) = self.get_wf_id(exec_id).await {
+            let (_, end) = self.get_start_end_edges(&wf_id);
+            for edge in end {
+                if self
+                    .containers
+                    .lock()
+                    .await
+                    .check_edge_exists(edge.clone(), exec_id)
+                {
+                    return false;
+                }
             }
+            true
+        } else {
+            false
         }
-        true
     }
 
     /// 実行IDに対応するワークフローの終了処理
