@@ -59,7 +59,7 @@ pub trait NodeBuilder {
     fn outputs(&self) -> &Vec<Arc<Edge>>;
 
     /// ノードの生成
-    fn build(self, inputs: Vec<Arc<Edge>>) -> Node;
+    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Node;
 }
 
 /// ノード
@@ -68,6 +68,7 @@ pub trait NodeBuilder {
 pub struct Node {
     id: NodeId,
     inputs: Vec<Arc<Edge>>,
+    manage_cnt: usize,
     outputs: Vec<Arc<Edge>>,
     func: Box<AsyncFn>,
     is_blocking: bool,
@@ -80,6 +81,7 @@ impl Node {
     /// # Arguments
     ///
     /// * `inputs` - 入力エッジ
+    /// * `manage_cnt` - 管理エッジを持つかどうか
     /// * `outputs` - 出力エッジ
     /// * `func` - ノードの処理
     /// * `is_blocking` - ブロッキングノードかどうか
@@ -87,6 +89,7 @@ impl Node {
     /// * `choice` - エッジの判断方法
     pub fn new(
         inputs: Vec<Arc<Edge>>,
+        manage_cnt: usize,
         outputs: Vec<Arc<Edge>>,
         func: Box<AsyncFn>,
         is_blocking: bool,
@@ -96,6 +99,7 @@ impl Node {
         Node {
             id: NodeId::new(),
             inputs,
+            manage_cnt,
             outputs,
             func,
             is_blocking,
@@ -109,6 +113,7 @@ impl Node {
     pub fn new_test(inputs: Vec<Arc<Edge>>, name: &'static str, choice: Choice) -> Self {
         Self::new(
             inputs,
+            0,
             vec![],
             Box::new(|_, _, _| Box::pin(async {})),
             false,
@@ -127,6 +132,11 @@ impl Node {
     /// 入力エッジの取得
     pub fn inputs(&self) -> &Vec<Arc<Edge>> {
         &self.inputs
+    }
+
+    /// 管理エッジの数の取得
+    pub fn manage_cnt(&self) -> usize {
+        self.manage_cnt
     }
 
     /// 出力エッジの取得
@@ -156,6 +166,7 @@ impl std::fmt::Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
             .field("inputs", &self.inputs)
+            .field("manage_cnt", &self.manage_cnt)
             .field("outputs", &self.outputs)
             .field("is_blocking", &self.is_blocking)
             .field("choice", &self.choice)
