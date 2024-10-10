@@ -296,7 +296,13 @@ impl Operator {
     ///
     /// 実行可能なノードと実行ID
     pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
-        self.queue.lock().await.pop()
+        let cons_lock = self.containers.lock().await;
+        while let Some((node, exec_id)) = self.queue.lock().await.pop() {
+            if cons_lock.check_node_executable(&node, exec_id) {
+                return Some((node, exec_id));
+            }
+        }
+        None
     }
 
     fn check_finish(
