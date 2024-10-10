@@ -50,6 +50,18 @@ type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
 type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Operator, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
 
+/// ノードビルダートレイト
+pub trait NodeBuilder {
+    /// ノードビルダーの生成
+    fn new() -> Self;
+
+    /// 出力エッジの取得
+    fn outputs(&self) -> &Vec<Arc<Edge>>;
+
+    /// ノードの生成
+    fn build(self, inputs: Vec<Arc<Edge>>) -> Node;
+}
+
 /// ノード
 ///
 /// NOTE: サイズが大きめ？
@@ -68,12 +80,14 @@ impl Node {
     /// # Arguments
     ///
     /// * `inputs` - 入力エッジ
+    /// * `outputs` - 出力エッジ
     /// * `func` - ノードの処理
     /// * `is_blocking` - ブロッキングノードかどうか
     /// * `name` - ノードの名前
     /// * `choice` - エッジの判断方法
     pub fn new(
         inputs: Vec<Arc<Edge>>,
+        outputs: Vec<Arc<Edge>>,
         func: Box<AsyncFn>,
         is_blocking: bool,
         name: &'static str,
@@ -82,7 +96,7 @@ impl Node {
         Node {
             id: NodeId::new(),
             inputs,
-            outputs: Vec::new(),
+            outputs,
             func,
             is_blocking,
             choice,
@@ -95,6 +109,7 @@ impl Node {
     pub fn new_test(inputs: Vec<Arc<Edge>>, name: &'static str, choice: Choice) -> Self {
         Self::new(
             inputs,
+            vec![],
             Box::new(|_, _, _| Box::pin(async {})),
             false,
             name,

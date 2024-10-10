@@ -445,6 +445,7 @@ mod test {
         let edge = Arc::new(Edge::new::<&str>());
         let mut node = Node::new(
             vec![edge.clone()],
+            vec![],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
                     let mut cons = op.get_container(self_.inputs(), exec_id).await;
