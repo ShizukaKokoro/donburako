@@ -59,7 +59,7 @@ pub trait NodeBuilder {
     fn outputs(&self) -> &Vec<Arc<Edge>>;
 
     /// ノードの生成
-    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Node;
+    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Arc<Node>;
 }
 
 /// ノード
