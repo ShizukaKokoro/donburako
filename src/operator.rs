@@ -441,6 +441,7 @@ mod test {
         op.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
             .await
             .unwrap();
+        drop(cons_lock);
         let next = op.get_next_node().await.unwrap();
         assert_eq!(next, (node, exec_id));
     }
