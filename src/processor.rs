@@ -5,7 +5,7 @@
 use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
-use log::{debug, info};
+use log::{debug, info, trace};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use thiserror::Error;
@@ -54,6 +54,11 @@ impl<T> Handlers<T> {
     fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>, exec_id: ExecutorId) {
         if let Some(retain) = self.retains.pop_front() {
             self.handles[retain] = Some((handle, exec_id));
+            #[cfg(feature = "dev")]
+            debug!(
+                "{:?} tasks are running",
+                self.handles.len() - self.retains.len()
+            );
         }
     }
 
@@ -75,6 +80,11 @@ impl<T> Handlers<T> {
     fn remove(&mut self, key: usize) {
         self.retains.push_back(key);
         self.handles[key] = None;
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running",
+            self.handles.len() - self.retains.len()
+        );
     }
 
     fn is_full(&self) -> bool {
@@ -125,7 +135,7 @@ impl ProcessorBuilder {
                 }
 
                 if op.has_executable_node().await {
-                    debug!("Get nodes enabled to run");
+                    trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
                     let (handle, exec_id) = if let Some((node, exec_id)) = op.get_next_node().await
@@ -137,6 +147,7 @@ impl ProcessorBuilder {
                             let _ = time.entry(key).or_insert_with(std::time::Instant::now);
                         }
                         let op_clone = op.clone();
+                        debug!("Task is started: {:?}", node.name());
                         if node.is_blocking() {
                             let rt_handle = Handle::current();
                             (
@@ -179,7 +190,7 @@ impl ProcessorBuilder {
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
-                    debug!("Check running tasks");
+                    trace!("Check running tasks");
                 }
                 for (key, (handle, exec_id)) in handlers.iter() {
                     let is_finished = op.is_finished(*exec_id).await;
