@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Handle;
+use tokio::sync::oneshot;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
 
@@ -33,7 +34,11 @@ pub enum ProcessorError {
     NotFinishedEdge,
 }
 
-type Handler<T> = (JoinHandle<Result<T, ProcessorError>>, ExecutorId);
+type Handler<T> = (
+    JoinHandle<Result<T, ProcessorError>>,
+    ExecutorId,
+    oneshot::Receiver<()>,
+);
 
 /// ハンドラ管理
 struct Handlers<T> {
@@ -51,9 +56,14 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>, exec_id: ExecutorId) {
+    fn push(
+        &mut self,
+        handle: JoinHandle<Result<T, ProcessorError>>,
+        exec_id: ExecutorId,
+        rx: oneshot::Receiver<()>,
+    ) {
         if let Some(retain) = self.retains.pop_front() {
-            self.handles[retain] = Some((handle, exec_id));
+            self.handles[retain] = Some((handle, exec_id, rx));
             #[cfg(feature = "dev")]
             debug!(
                 "{:?} tasks are running",
@@ -62,14 +72,7 @@ impl<T> Handlers<T> {
         }
     }
 
-    fn iter(
-        &mut self,
-    ) -> impl Iterator<
-        Item = (
-            usize,
-            &mut (JoinHandle<Result<T, ProcessorError>>, ExecutorId),
-        ),
-    > {
+    fn iter(&mut self) -> impl Iterator<Item = (usize, &mut Handler<T>)> {
         self.handles
             .iter_mut()
             .enumerate()
@@ -138,61 +141,72 @@ impl ProcessorBuilder {
                     trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
-                    let (handle, exec_id) = if let Some((node, exec_id)) = op.get_next_node().await
-                    {
-                        #[cfg(feature = "dev")]
-                        {
-                            let wf_id = op.get_wf_id(exec_id).await.unwrap();
-                            let key = (wf_id, exec_id);
-                            let _ = time.entry(key).or_insert_with(std::time::Instant::now);
-                        }
-                        let op_clone = op.clone();
-                        debug!("Task is started: {:?}", node.name());
-                        if node.is_blocking() {
-                            let rt_handle = Handle::current();
-                            (
-                                spawn_blocking(move || {
-                                    rt_handle.block_on(async {
-                                        node.run(&op_clone, exec_id).await;
-                                    });
-                                    Ok(node.name())
-                                }),
-                                exec_id,
-                            )
-                        } else {
-                            #[cfg(not(feature = "dev"))]
+                    let (handle, exec_id, rx) =
+                        if let Some((node, exec_id)) = op.get_next_node().await {
+                            #[cfg(feature = "dev")]
                             {
+                                let wf_id = op.get_wf_id(exec_id).await.unwrap();
+                                let key = (wf_id, exec_id);
+                                let _ = time.entry(key).or_insert_with(std::time::Instant::now);
+                            }
+                            let op_clone = op.clone();
+                            debug!("Task is started: {:?}", node.name());
+                            let (tx, rx) = oneshot::channel();
+                            if node.is_blocking() {
+                                let rt_handle = Handle::current();
                                 (
-                                    spawn(async move {
-                                        node.run(&op_clone, exec_id).await;
+                                    spawn_blocking(move || {
+                                        rt_handle.block_on(async {
+                                            node.run(&op_clone, exec_id).await;
+                                        });
+                                        tx.send(()).unwrap();
                                         Ok(node.name())
                                     }),
                                     exec_id,
+                                    rx,
+                                )
+                            } else {
+                                #[cfg(not(feature = "dev"))]
+                                {
+                                    (
+                                        spawn(async move {
+                                            node.run(&op_clone, exec_id).await;
+                                            tx.send(()).unwrap();
+                                            Ok(node.name())
+                                        }),
+                                        exec_id,
+                                        rx,
+                                    )
+                                }
+                                #[cfg(feature = "dev")]
+                                (
+                                    tokio::task::Builder::new()
+                                        .name(node.name())
+                                        .spawn(async move {
+                                            node.run(&op_clone, exec_id).await;
+                                            tx.send(()).unwrap();
+                                            Ok(node.name())
+                                        })
+                                        .unwrap(),
+                                    exec_id,
+                                    rx,
                                 )
                             }
-                            #[cfg(feature = "dev")]
-                            (
-                                tokio::task::Builder::new()
-                                    .name(node.name())
-                                    .spawn(async move {
-                                        node.run(&op_clone, exec_id).await;
-                                        Ok(node.name())
-                                    })
-                                    .unwrap(),
-                                exec_id,
-                            )
-                        }
-                    } else {
-                        break;
-                    };
-                    handlers.push(handle, exec_id);
+                        } else {
+                            break;
+                        };
+                    handlers.push(handle, exec_id, rx);
                 }
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
                     trace!("Check running tasks");
                 }
-                for (key, (handle, exec_id)) in handlers.iter() {
+                for (key, (handle, exec_id, rx)) in handlers.iter() {
+                    if rx.try_recv().is_ok() {
+                        debug!("Task is finished: {:?}", handle.await.unwrap().unwrap());
+                        finished.push(key);
+                    }
                     let is_finished = op.is_finished(*exec_id).await;
                     if is_finished {
                         #[cfg(feature = "dev")]
@@ -207,12 +221,9 @@ impl ProcessorBuilder {
                                 );
                             }
                         }
-                        let res = handle.await.unwrap().unwrap();
-                        debug!("Task is finished: {:?}", res);
                         if op.check_all_containers_taken(*exec_id).await {
                             op.finish_workflow_by_execute_id(*exec_id).await;
                         }
-                        finished.push(key);
                     }
                 }
                 for key in finished {
@@ -312,11 +323,14 @@ mod tests {
         let handle0 = spawn(async { Ok(()) });
         let handle1 = spawn(async { Ok(()) });
         let handle2 = spawn(async { Ok(()) });
+        let (_, rx0) = oneshot::channel();
+        let (_, rx1) = oneshot::channel();
+        let (_, rx2) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id);
-        handlers.push(handle1, exec_id);
-        handlers.push(handle2, exec_id);
+        handlers.push(handle0, exec_id, rx0);
+        handlers.push(handle1, exec_id, rx1);
+        handlers.push(handle2, exec_id, rx2);
 
         assert_eq!(handlers.handles.len(), 3);
 
@@ -333,11 +347,14 @@ mod tests {
         let handle0 = spawn(async { Ok(0) });
         let handle1 = spawn(async { Ok(1) });
         let handle2 = spawn(async { Ok(2) });
+        let (_, rx0) = oneshot::channel();
+        let (_, rx1) = oneshot::channel();
+        let (_, rx2) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id);
-        handlers.push(handle1, exec_id);
-        handlers.push(handle2, exec_id);
+        handlers.push(handle0, exec_id, rx0);
+        handlers.push(handle1, exec_id, rx1);
+        handlers.push(handle2, exec_id, rx2);
         handlers.remove(1);
 
         let mut iter_key = Vec::new();
@@ -355,17 +372,21 @@ mod tests {
         let handle1 = spawn(async { Ok(1) });
         let handle2 = spawn(async { Ok(2) });
         let handle3 = spawn(async { Ok(3) });
+        let (_, rx0) = oneshot::channel();
+        let (_, rx1) = oneshot::channel();
+        let (_, rx2) = oneshot::channel();
+        let (_, rx3) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id);
-        handlers.push(handle1, exec_id);
-        handlers.push(handle2, exec_id);
+        handlers.push(handle0, exec_id, rx0);
+        handlers.push(handle1, exec_id, rx1);
+        handlers.push(handle2, exec_id, rx2);
         handlers.remove(1);
-        handlers.push(handle3, exec_id);
+        handlers.push(handle3, exec_id, rx3);
 
         let mut iter_index = Vec::new();
 
-        for (key, (handle, _)) in handlers.iter() {
+        for (key, (handle, _, _)) in handlers.iter() {
             let res = handle.await.unwrap().unwrap();
             iter_index.push((key, res));
         }
