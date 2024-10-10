@@ -58,8 +58,18 @@ pub trait NodeBuilder {
     /// 出力エッジの取得
     fn outputs(&self) -> &Vec<Arc<Edge>>;
 
-    /// ノードの生成
-    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Arc<Node>;
+    /// ノードのビルド
+    ///
+    /// # Arguments
+    ///
+    /// * `inputs` - 入力エッジ
+    /// * `manage_cnt` - 管理エッジを持つかどうか
+    ///
+    /// # Returns
+    ///
+    /// ノードの生成結果。
+    /// 入力のエッジの型が一致しない場合はエラーを返す。
+    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Result<Arc<Node>, NodeError>;
 }
 
 /// ノード
