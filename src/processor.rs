@@ -102,7 +102,7 @@ impl<T> Handlers<T> {
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
-    workflow: Vec<WorkflowBuilder>,
+    workflow: Vec<(WorkflowId, WorkflowBuilder)>,
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -110,9 +110,9 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `wf` - ワークフロービルダー
-    pub fn add_workflow(self, wf: WorkflowBuilder) -> Self {
+    pub fn add_workflow(self, wf_id: WorkflowId, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
-        wfs.push(wf);
+        wfs.push((wf_id, wf));
         Self { workflow: wfs }
     }
 

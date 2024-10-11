@@ -31,19 +31,11 @@ impl WorkflowId {
 }
 
 /// ワークフロービルダー
+#[derive(Default)]
 pub struct WorkflowBuilder {
-    id: WorkflowId,
     nodes: Vec<Arc<Node>>,
 }
 impl WorkflowBuilder {
-    /// 新しいワークフロービルダーを生成
-    pub fn new(id: WorkflowId) -> Self {
-        Self {
-            id,
-            nodes: Vec::new(),
-        }
-    }
-
     /// ノードの追加
     pub fn add_node(self, node: Arc<Node>) -> Result<Self, WorkflowError> {
         let mut nodes = self.nodes;
@@ -51,11 +43,11 @@ impl WorkflowBuilder {
             return Err(WorkflowError::NodeIsAlreadyAdded);
         }
         nodes.push(node);
-        Ok(Self { nodes, ..self })
+        Ok(Self { nodes })
     }
 
     /// ワークフローの生成
-    pub(crate) fn build(self) -> (Workflow, WorkflowId) {
+    pub(crate) fn build(self) -> Workflow {
         let mut input_to_node = HashMap::new();
         let mut all_edges = HashSet::new();
         let mut input_edges = HashSet::new();
@@ -75,14 +67,11 @@ impl WorkflowBuilder {
 
         let start_edges = all_edges.difference(&output_edges).cloned().collect();
         let end_edges = all_edges.difference(&input_edges).cloned().collect();
-        (
-            Workflow {
-                input_to_node,
-                start_edges,
-                end_edges,
-            },
-            self.id,
-        )
+        Workflow {
+            input_to_node,
+            start_edges,
+            end_edges,
+        }
     }
 }
 
@@ -128,18 +117,17 @@ mod tests {
     #[test]
     fn test_workflow_builder() {
         let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
-        let wf = WorkflowBuilder::new(WorkflowId::new("test"))
+        let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
-            .build()
-            .0;
+            .build();
         assert_eq!(wf.input_to_node.len(), 0);
     }
 
     #[test]
     fn test_workflow_builder_add_node() {
         let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
-        let wf_err = WorkflowBuilder::new(WorkflowId::new("test"))
+        let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
             .add_node(node.clone());
@@ -151,13 +139,12 @@ mod tests {
         let mut node0 = Node::new_test(vec![], "node0", Choice::All);
         let edge = node0.add_output::<i32>();
         let node1 = Node::new_test(vec![edge.clone()], "node1", Choice::All);
-        let wf = WorkflowBuilder::new(WorkflowId::new("test"))
+        let wf = WorkflowBuilder::default()
             .add_node(Arc::new(node0))
             .unwrap()
             .add_node(Arc::new(node1))
             .unwrap()
-            .build()
-            .0;
+            .build();
         assert_eq!(wf.input_to_node.len(), 1);
     }
 
@@ -166,11 +153,10 @@ mod tests {
         let edge = Arc::new(Edge::new::<i32>());
         let node0 = Node::new_test(vec![edge.clone()], "node0", Choice::All);
         let node0_rc = Arc::new(node0);
-        let wf = WorkflowBuilder::new(WorkflowId::new("test"))
+        let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())
             .unwrap()
-            .build()
-            .0;
+            .build();
         let node = wf.get_node(&edge).unwrap();
         assert_eq!(node, node0_rc);
     }

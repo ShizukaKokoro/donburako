@@ -91,11 +91,10 @@ impl Operator {
     /// # Arguments
     ///
     /// * `builders` - ワークフロービルダーのリスト
-    pub(crate) fn new(builders: Vec<WorkflowBuilder>) -> Self {
+    pub(crate) fn new(builders: Vec<(WorkflowId, WorkflowBuilder)>) -> Self {
         let mut workflows = HashMap::new();
-        for builder in builders {
-            let (workflow, id) = builder.build();
-            let _ = workflows.insert(id, workflow);
+        for (id, builder) in builders {
+            let _ = workflows.insert(id, builder.build());
         }
         Self {
             workflows: Arc::new(workflows),
@@ -393,8 +392,8 @@ mod test {
         let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
-        let op = Operator::new(vec![builder]);
+        let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         op.start_workflow(exec_id, wf_id, None).await;
         op.add_new_container(edge.clone(), exec_id, "test")
@@ -430,8 +429,8 @@ mod test {
         let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
         let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
-        let builder = WorkflowBuilder::new(wf_id).add_node(node.clone()).unwrap();
-        let op = Operator::new(vec![builder]);
+        let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
+        let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         op.start_workflow(exec_id, wf_id, None).await;
         op.add_new_container(edge.clone(), exec_id, "test")
@@ -474,10 +473,8 @@ mod test {
             Choice::All,
         );
         let edge_to = node.add_output::<&str>();
-        let builder = WorkflowBuilder::new(wf_id)
-            .add_node(Arc::new(node))
-            .unwrap();
-        let op = Operator::new(vec![builder]);
+        let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
+        let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         let (tx, rx) = oneshot::channel();
         op.start_workflow(exec_id, wf_id, Some(tx)).await;
