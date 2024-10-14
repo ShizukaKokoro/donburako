@@ -254,7 +254,6 @@ impl Processor {
     ///
     /// * `wf_id` - ワークフローID
     pub async fn start(&self, wf_id: WorkflowId) -> ExecutorId {
-        info!("Start workflow: {:?}", wf_id);
         let id = ExecutorId::new();
         self.op.start_workflow(id, wf_id, None).await;
         id

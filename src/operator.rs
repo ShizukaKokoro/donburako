@@ -4,6 +4,7 @@ use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
 use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
+use log::info;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
@@ -152,6 +153,7 @@ impl Operator {
         wf_id: WorkflowId,
         tx: Option<oneshot::Sender<()>>,
     ) {
+        info!("Start workflow: {:?}({:?})", wf_id, exec_id);
         let _ = self
             .executors
             .lock()
