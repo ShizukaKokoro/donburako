@@ -4,7 +4,7 @@ use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
 use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
-use log::info;
+use log::{debug, info};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
@@ -379,6 +379,7 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     pub async fn finish_workflow_by_execute_id(&self, exec_id: ExecutorId) {
+        debug!("Ending workflow: {:?}", exec_id);
         self.containers.lock().await.finish_containers(exec_id);
         let _ = self.executors.lock().await.remove(&exec_id);
     }
