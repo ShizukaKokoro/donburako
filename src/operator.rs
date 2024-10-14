@@ -189,7 +189,7 @@ impl Operator {
     ) -> Result<(), OperatorError> {
         let mut cons_lock = self.containers.lock().await;
         cons_lock.add_new_container(edge.clone(), exec_id, data)?;
-        self.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
+        self.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
             .await
     }
 
@@ -205,7 +205,7 @@ impl Operator {
     /// コンテナ
     pub async fn get_container(
         &self,
-        edge: &Vec<Arc<Edge>>,
+        edge: &[Arc<Edge>],
         exec_id: ExecutorId,
     ) -> VecDeque<Container> {
         let mut containers = VecDeque::new();
@@ -233,7 +233,7 @@ impl Operator {
     /// 成功した場合は Ok(())
     pub async fn add_container(
         &self,
-        edge: &Vec<Arc<Edge>>,
+        edge: &[Arc<Edge>],
         exec_id: ExecutorId,
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
@@ -257,7 +257,7 @@ impl Operator {
     /// 成功した場合は Ok(())
     async fn enqueue_node_if_executable(
         &self,
-        edge: &Vec<Arc<Edge>>,
+        edge: &[Arc<Edge>],
         exec_id: ExecutorId,
         cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) -> Result<(), OperatorError> {
@@ -431,7 +431,7 @@ mod test {
             .await
             .unwrap();
         let mut cons_lock = op.containers.lock().await;
-        op.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
+        op.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
             .await
             .unwrap();
         let queue = op.queue.lock().await;
@@ -468,7 +468,7 @@ mod test {
             .await
             .unwrap();
         let mut cons_lock = op.containers.lock().await;
-        op.enqueue_node_if_executable(&vec![edge], exec_id, &mut cons_lock)
+        op.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
             .await
             .unwrap();
         drop(cons_lock);
@@ -515,12 +515,12 @@ mod test {
         let is_finished = op.is_finished(exec_id).await;
         assert!(!is_finished);
         assert!(op
-            .get_container(&vec![edge_to.clone()], exec_id)
+            .get_container(&[edge_to.clone()], exec_id)
             .await
             .is_empty());
         f.await;
         rx.await.unwrap();
-        assert_eq!(op.get_container(&vec![edge_to], exec_id).await.len(), 1);
+        assert_eq!(op.get_container(&[edge_to], exec_id).await.len(), 1);
         let is_finished = op.is_finished(exec_id).await;
         assert!(is_finished);
     }
