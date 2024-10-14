@@ -288,7 +288,7 @@ impl Processor {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Result<T, ProcessorError> {
-        let mut cons = self.op.get_container(&vec![edge], exec_id).await;
+        let mut cons = self.op.get_container(&[edge], exec_id).await;
         if cons.len() == 1 {
             let mut con = cons.pop_front().unwrap();
             assert_eq!(cons.len(), 0);
