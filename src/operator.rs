@@ -74,6 +74,11 @@ enum State {
     ///
     /// ワークフローID
     Finished(WorkflowId),
+    /// タイマー待ち
+    ///
+    /// ワークフローID
+    #[cfg(feature = "dev")]
+    WaitTimer(WorkflowId),
 }
 
 /// オペレーター
@@ -121,6 +126,8 @@ impl Operator {
         match exec.get(&exec_id) {
             Some(State::Running(wf_id, _)) => Some(*wf_id),
             Some(State::Finished(wf_id)) => Some(*wf_id),
+            #[cfg(feature = "dev")]
+            Some(State::WaitTimer(wf_id)) => Some(*wf_id),
             _ => None,
         }
     }
@@ -259,6 +266,7 @@ impl Operator {
             match state {
                 State::Running(wf_id, _) => wf_id,
                 State::Finished(wf_id) => wf_id,
+                State::WaitTimer(wf_id) => wf_id,
             }
         } else {
             return Err(OperatorError::NotStarted);
@@ -340,7 +348,10 @@ impl Operator {
     /// ワークフローが終了していない場合は false、終了している場合は true
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         let exec = self.executors.lock().await;
-        matches!(exec.get(&exec_id), Some(State::Finished(_)))
+        matches!(
+            exec.get(&exec_id),
+            Some(State::Finished(_)) | Some(State::WaitTimer(_))
+        )
     }
 
     /// 終了したワークフローから全てのコンテナがなくなっているか確認する
@@ -381,6 +392,23 @@ impl Operator {
     pub async fn finish_workflow_by_execute_id(&self, exec_id: ExecutorId) {
         debug!("Ending workflow: {:?}", exec_id);
         self.containers.lock().await.finish_containers(exec_id);
+        #[cfg(not(feature = "dev"))]
+        let _ = self.executors.lock().await.remove(&exec_id);
+        #[cfg(feature = "dev")]
+        {
+            let mut exec = self.executors.lock().await;
+            let wf_id = match exec.remove(&exec_id) {
+                Some(State::Running(wf_id, _)) => wf_id,
+                Some(State::Finished(wf_id)) => wf_id,
+                Some(State::WaitTimer(wf_id)) => wf_id,
+                None => return,
+            };
+            let _ = exec.insert(exec_id, State::WaitTimer(wf_id));
+        }
+    }
+
+    #[cfg(feature = "dev")]
+    pub(crate) async fn remove_wait_timer(&self, exec_id: ExecutorId) {
         let _ = self.executors.lock().await.remove(&exec_id);
     }
 }

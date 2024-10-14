@@ -211,29 +211,16 @@ impl ProcessorBuilder {
                     if is_finished {
                         #[cfg(feature = "dev")]
                         {
-                            if let Some(wf_id) = op.get_wf_id(*exec_id).await {
-                                if let Some(inst) = time.remove(&(wf_id, *exec_id)) {
-                                    log::info!(
-                                        "{:?}({:?}) is finished in {:?}",
-                                        wf_id,
-                                        exec_id,
-                                        inst.elapsed()
-                                    );
-                                }
-                            } else {
-                                // NOTE: すでにワークフロー内で終了処理を行ったときに到達し、タイマーを全探索して削除する。
-                                for ((wf_id, e_id), inst) in time.iter() {
-                                    if e_id != exec_id {
-                                        continue;
-                                    }
-                                    log::info!(
-                                        "{:?}({:?}) is finished already {:?}",
-                                        wf_id,
-                                        exec_id,
-                                        inst.elapsed()
-                                    );
-                                }
+                            let wf_id = op.get_wf_id(*exec_id).await.unwrap();
+                            if let Some(inst) = time.remove(&(wf_id, *exec_id)) {
+                                log::info!(
+                                    "{:?}({:?}) is finished in {:?}",
+                                    wf_id,
+                                    exec_id,
+                                    inst.elapsed()
+                                );
                             }
+                            op.remove_wait_timer(*exec_id).await;
                         }
                         if op.check_all_containers_taken(*exec_id).await {
                             op.finish_workflow_by_execute_id(*exec_id).await;
