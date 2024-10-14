@@ -4,6 +4,7 @@
 
 use crate::edge::Edge;
 use crate::node::Node;
+use log::debug;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
@@ -54,6 +55,12 @@ impl WorkflowBuilder {
         let mut output_edges = HashSet::new();
 
         for node in self.nodes.iter() {
+            debug!(
+                "{:?} -->| {:?} | --> {:?}",
+                node.inputs(),
+                node.name(),
+                node.outputs()
+            );
             for input in node.inputs() {
                 let _ = input_to_node.insert(input.clone(), node.clone());
                 let _ = all_edges.insert(input.clone());
