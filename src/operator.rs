@@ -19,8 +19,8 @@ pub enum OperatorError {
     ContainerError(#[from] ContainerError),
 
     /// ワークフローが開始されていない
-    #[error("Workflow is not started")]
-    NotStarted,
+    #[error("Workflow is not started {0}")]
+    NotStarted(String),
 }
 
 /// 実行ID
@@ -270,7 +270,10 @@ impl Operator {
                 State::WaitTimer(wf_id) => wf_id,
             }
         } else {
-            return Err(OperatorError::NotStarted);
+            #[cfg(feature = "dev")]
+            return Err(OperatorError::NotStarted(format!("{:?}", exec_id)));
+            #[cfg(not(feature = "dev"))]
+            return Ok(());
         };
         let mut finish = false;
         let mut queue_lock = self.queue.lock().await;
