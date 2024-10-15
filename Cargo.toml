@@ -10,6 +10,7 @@ tokio = { workspace = true }
 tokio-util.workspace = true
 thiserror.workspace = true
 log.workspace = true
+fake.workspace = true
 
 console-subscriber = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
