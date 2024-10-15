@@ -266,6 +266,7 @@ impl Operator {
             match state {
                 State::Running(wf_id, _) => wf_id,
                 State::Finished(wf_id) => wf_id,
+                #[cfg(feature = "dev")]
                 State::WaitTimer(wf_id) => wf_id,
             }
         } else {
@@ -348,10 +349,12 @@ impl Operator {
     /// ワークフローが終了していない場合は false、終了している場合は true
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         let exec = self.executors.lock().await;
-        matches!(
-            exec.get(&exec_id),
-            Some(State::Finished(_)) | Some(State::WaitTimer(_))
-        )
+
+        #[cfg(feature = "dev")]
+        let result = matches!(exec.get(&exec_id), Some(State::Finished(_)));
+        #[cfg(not(feature = "dev"))]
+        let result = matches!(exec.get(&exec_id), Some(State::Finished(_)));
+        result
     }
 
     /// 終了したワークフローから全てのコンテナがなくなっているか確認する
