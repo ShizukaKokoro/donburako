@@ -166,6 +166,10 @@ impl Operator {
             .lock()
             .await
             .insert(exec_id, State::Running(wf_id, tx));
+        let mut queue_lock = self.queue.lock().await;
+        for node in self.workflows[&wf_id].start_nodes() {
+            queue_lock.push(node.clone(), exec_id);
+        }
     }
 
     /// 新しいコンテナの追加

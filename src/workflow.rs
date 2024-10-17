@@ -64,6 +64,7 @@ impl WorkflowBuilder {
         let mut all_edges = HashSet::new();
         let mut input_edges = HashSet::new();
         let mut output_edges = HashSet::new();
+        let mut start_nodes = HashSet::new();
 
         for node in self.nodes.iter() {
             debug!(
@@ -72,6 +73,9 @@ impl WorkflowBuilder {
                 node.name(),
                 node.outputs()
             );
+            if node.inputs().is_empty() {
+                let _ = start_nodes.insert(node.clone());
+            }
             for input in node.inputs() {
                 let _ = input_to_node.insert(input.clone(), node.clone());
                 let _ = all_edges.insert(input.clone());
@@ -90,6 +94,7 @@ impl WorkflowBuilder {
             start_edges,
             end_edges,
             ignore_edges: self.ignored_edges,
+            start_nodes,
         }
     }
 }
@@ -105,6 +110,8 @@ pub(crate) struct Workflow {
     end_edges: Vec<Arc<Edge>>,
     /// 無視するエッジ
     ignore_edges: HashSet<Arc<Edge>>,
+    /// 入力を持たない開始ノード
+    start_nodes: HashSet<Arc<Node>>,
 }
 impl Workflow {
     /// エッジからノードを取得
@@ -131,6 +138,11 @@ impl Workflow {
     /// 無視するエッジかどうか
     pub(crate) fn is_ignore_edge(&self, edge: &Arc<Edge>) -> bool {
         self.ignore_edges.contains(edge)
+    }
+
+    /// 開始ノードを取得
+    pub(crate) fn start_nodes(&self) -> &HashSet<Arc<Node>> {
+        &self.start_nodes
     }
 }
 
