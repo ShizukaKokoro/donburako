@@ -89,6 +89,7 @@ impl WorkflowBuilder {
             input_to_node,
             start_edges,
             end_edges,
+            ignore_edges: self.ignored_edges,
         }
     }
 }
@@ -102,6 +103,8 @@ pub(crate) struct Workflow {
     start_edges: Vec<Arc<Edge>>,
     /// 終点のエッジ
     end_edges: Vec<Arc<Edge>>,
+    /// 無視するエッジ
+    ignore_edges: HashSet<Arc<Edge>>,
 }
 impl Workflow {
     /// エッジからノードを取得
@@ -123,6 +126,11 @@ impl Workflow {
     /// 終点のエッジを取得
     pub(crate) fn end_edges(&self) -> &Vec<Arc<Edge>> {
         &self.end_edges
+    }
+
+    /// 無視するエッジかどうか
+    pub(crate) fn is_ignore_edge(&self, edge: &Arc<Edge>) -> bool {
+        self.ignore_edges.contains(edge)
     }
 }
 
