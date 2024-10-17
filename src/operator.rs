@@ -282,6 +282,10 @@ impl Operator {
                 if cons_lock.check_node_executable(&node, exec_id) {
                     queue_lock.push(node, exec_id);
                 }
+            } else if self.workflows[wf_id].is_ignore_edge(e) {
+                if let Some(mut con) = cons_lock.get_container(e.clone(), exec_id) {
+                    con.take_anyway();
+                }
             } else {
                 finish = true;
             }
