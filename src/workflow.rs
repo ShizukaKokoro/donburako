@@ -35,6 +35,7 @@ impl WorkflowId {
 #[derive(Default)]
 pub struct WorkflowBuilder {
     nodes: Vec<Arc<Node>>,
+    ignored_edges: HashSet<Arc<Edge>>,
 }
 impl WorkflowBuilder {
     /// ノードの追加
@@ -44,7 +45,17 @@ impl WorkflowBuilder {
             return Err(WorkflowError::NodeIsAlreadyAdded);
         }
         nodes.push(node);
-        Ok(Self { nodes })
+        Ok(Self { nodes, ..self })
+    }
+
+    /// エッジの無視
+    pub fn ignore_edge(self, edge: Arc<Edge>) -> Self {
+        let mut ignored_edges = self.ignored_edges;
+        let _ = ignored_edges.insert(edge);
+        Self {
+            ignored_edges,
+            ..self
+        }
     }
 
     /// ワークフローの生成
