@@ -95,7 +95,7 @@ impl Container {
     }
 
     /// データをとにかく取り出す
-    fn take_anyway(&mut self) {
+    pub(crate) fn take_anyway(&mut self) {
         let _ = self.data.take();
         let _ = self.ty.take();
     }
