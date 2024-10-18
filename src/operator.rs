@@ -68,8 +68,8 @@ impl ExecutableQueue {
 enum State {
     /// 実行中
     ///
-    /// ワークフローIDと終了通知用のチャンネル
-    Running(WorkflowId, Option<oneshot::Sender<()>>),
+    /// ワークフローIDと終了通知用のチャンネルと無視する残りのエッジ数
+    Running(WorkflowId, Option<oneshot::Sender<()>>, usize),
     /// 終了
     ///
     /// ワークフローID
@@ -124,7 +124,7 @@ impl Operator {
     pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
         let exec = self.executors.lock().await;
         match exec.get(&exec_id) {
-            Some(State::Running(wf_id, _)) => Some(*wf_id),
+            Some(State::Running(wf_id, _, _)) => Some(*wf_id),
             Some(State::Finished(wf_id)) => Some(*wf_id),
             #[cfg(feature = "dev")]
             Some(State::WaitTimer(wf_id)) => Some(*wf_id),
@@ -161,11 +161,12 @@ impl Operator {
         tx: Option<oneshot::Sender<()>>,
     ) {
         info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self
             .executors
             .lock()
             .await
-            .insert(exec_id, State::Running(wf_id, tx));
+            .insert(exec_id, State::Running(wf_id, tx, ignore_cnt));
         let mut queue_lock = self.queue.lock().await;
         for node in self.workflows[&wf_id].start_nodes() {
             queue_lock.push(node.clone(), exec_id);
@@ -266,12 +267,12 @@ impl Operator {
         cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) -> Result<(), OperatorError> {
         let mut exec = self.executors.lock().await;
-        let wf_id = if let Some(state) = exec.get(&exec_id) {
+        let (wf_id, mut ignore_cnt) = if let Some(state) = exec.get(&exec_id) {
             match state {
-                State::Running(wf_id, _) => wf_id,
-                State::Finished(wf_id) => wf_id,
+                State::Running(wf_id, _, ignore_cnt) => (wf_id, *ignore_cnt),
+                State::Finished(wf_id) => (wf_id, 0),
                 #[cfg(feature = "dev")]
-                State::WaitTimer(wf_id) => wf_id,
+                State::WaitTimer(wf_id) => (wf_id, 0),
             }
         } else {
             #[cfg(feature = "dev")]
@@ -286,9 +287,13 @@ impl Operator {
                 if cons_lock.check_node_executable(&node, exec_id) {
                     queue_lock.push(node, exec_id);
                 }
-            } else if self.workflows[wf_id].is_ignore_edge(e) {
+            } else if self.workflows[wf_id].ignore_edges().contains(e) {
+                ignore_cnt -= 1;
                 if let Some(mut con) = cons_lock.get_container(e.clone(), exec_id) {
                     con.take_anyway();
+                }
+                if ignore_cnt == 0 {
+                    finish = true;
                 }
             } else {
                 finish = true;
@@ -332,10 +337,15 @@ impl Operator {
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
         cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) {
-        let wf_id = if let Some(State::Running(wf_id, tx)) = exec.remove(&exec_id) {
+        let wf_id = if let Some(State::Running(wf_id, tx, ignore_cnt)) = exec.remove(&exec_id) {
             for end in self.workflows[&wf_id].end_edges() {
+                if self.workflows[&wf_id].ignore_edges().contains(end) {
+                    continue;
+                }
                 if !cons_lock.check_edge_exists(end.clone(), exec_id) {
-                    assert!(exec.insert(exec_id, State::Running(wf_id, tx)).is_none());
+                    assert!(exec
+                        .insert(exec_id, State::Running(wf_id, tx, ignore_cnt))
+                        .is_none());
                     return;
                 }
             }
@@ -412,13 +422,19 @@ impl Operator {
         {
             let mut exec = self.executors.lock().await;
             let wf_id = match exec.remove(&exec_id) {
-                Some(State::Running(wf_id, _)) => wf_id,
+                Some(State::Running(wf_id, _, _)) => wf_id,
                 Some(State::Finished(wf_id)) => wf_id,
                 Some(State::WaitTimer(wf_id)) => wf_id,
                 None => return,
             };
             let _ = exec.insert(exec_id, State::WaitTimer(wf_id));
         }
+    }
+
+    /// 全てのワークフローが終了しているか確認する
+    pub async fn check_all_finished(&self) -> bool {
+        let exec = self.executors.lock().await;
+        exec.is_empty()
     }
 
     #[cfg(feature = "dev")]
@@ -462,7 +478,7 @@ mod test {
         let executors = op.executors.lock().await;
         assert_eq!(
             match executors.get(&exec_id).unwrap() {
-                State::Running(id, _) => id,
+                State::Running(id, _, _) => id,
                 _ => panic!(),
             },
             &wf_id

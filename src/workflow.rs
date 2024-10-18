@@ -135,9 +135,9 @@ impl Workflow {
         &self.end_edges
     }
 
-    /// 無視するエッジかどうか
-    pub(crate) fn is_ignore_edge(&self, edge: &Arc<Edge>) -> bool {
-        self.ignore_edges.contains(edge)
+    /// 無視するエッジを取得
+    pub fn ignore_edges(&self) -> &HashSet<Arc<Edge>> {
+        &self.ignore_edges
     }
 
     /// 開始ノードを取得

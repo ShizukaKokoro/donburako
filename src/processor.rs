@@ -131,10 +131,16 @@ impl ProcessorBuilder {
 
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
+        let shutdown_token = CancellationToken::new();
+        let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
+            let mut flag = true;
             loop {
-                if cancel_clone.is_cancelled() {
+                if cancel_clone.is_cancelled() || !flag {
                     break;
+                }
+                if shutdown_clone.is_cancelled() && op.check_all_finished().await {
+                    flag = false;
                 }
 
                 if op.has_executable_node().await {
@@ -238,6 +244,7 @@ impl ProcessorBuilder {
             op: op_clone,
             handle,
             cancel,
+            shutdown_token,
         })
     }
 }
@@ -247,6 +254,7 @@ pub struct Processor {
     op: Operator,
     handle: JoinHandle<Result<(), ProcessorError>>,
     cancel: CancellationToken,
+    shutdown_token: CancellationToken,
 }
 impl Processor {
     /// ワークフローの開始
@@ -302,6 +310,12 @@ impl Processor {
     pub fn stop(&self) {
         info!("Stop processor");
         self.cancel.cancel();
+    }
+
+    /// プロセッサーのシャットダウン
+    pub fn shutdown(&self) {
+        info!("Shutdown processor");
+        self.shutdown_token.cancel();
     }
 
     /// プロセッサーの待機
