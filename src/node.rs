@@ -98,6 +98,7 @@ impl Node {
     /// * `name` - ノードの名前
     /// * `choice` - エッジの判断方法
     pub fn new(
+        #[cfg(all(feature = "serialize", not(test)))] id: Uuid,
         inputs: Vec<Arc<Edge>>,
         manage_cnt: usize,
         outputs: Vec<Arc<Edge>>,
@@ -107,6 +108,9 @@ impl Node {
         choice: Choice,
     ) -> Self {
         Node {
+            #[cfg(all(feature = "serialize", not(test)))]
+            id: NodeId(id),
+            #[cfg(any(not(feature = "serialize"), test))]
             id: NodeId::new(),
             inputs,
             manage_cnt,

@@ -18,9 +18,14 @@ pub struct Edge {
 }
 impl Edge {
     /// エッジの生成
-    pub fn new<T: 'static + Send + Sync>() -> Self {
+    pub fn new<T: 'static + Send + Sync>(
+        #[cfg(all(feature = "serialize", not(test)))] id: Uuid,
+    ) -> Self {
         Edge {
             ty: TypeId::of::<T>(),
+            #[cfg(all(feature = "serialize", not(test)))]
+            id,
+            #[cfg(any(not(feature = "serialize"), test))]
             id: Uuid::new_v4(),
         }
     }
