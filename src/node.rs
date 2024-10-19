@@ -72,6 +72,40 @@ pub trait NodeBuilder {
     fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Result<Arc<Node>, NodeError>;
 }
 
+/// ノード設定
+pub struct NodeConfig {
+    id: Option<Uuid>,
+    func: Box<AsyncFn>,
+    is_blocking: bool,
+    choice: Choice,
+    name: &'static str,
+}
+impl NodeConfig {
+    /// ノード設定の生成
+    ///
+    /// # Arguments
+    ///
+    /// * `func` - ノードの処理
+    /// * `is_blocking` - ブロッキングノードかどうか
+    /// * `choice` - エッジの判断方法
+    /// * `name` - ノードの名前
+    pub fn new(func: Box<AsyncFn>, is_blocking: bool, choice: Choice, name: &'static str) -> Self {
+        NodeConfig {
+            id: None,
+            func,
+            is_blocking,
+            choice,
+            name,
+        }
+    }
+
+    /// IDの登録
+    pub fn id(mut self, id: Uuid) -> Self {
+        self.id = Some(id);
+        self
+    }
+}
+
 /// ノード
 ///
 /// NOTE: サイズが大きめ？
@@ -90,35 +124,30 @@ impl Node {
     ///
     /// # Arguments
     ///
+    /// * `config` - ノード設定
     /// * `inputs` - 入力エッジ
     /// * `manage_cnt` - 管理エッジを持つかどうか
     /// * `outputs` - 出力エッジ
-    /// * `func` - ノードの処理
-    /// * `is_blocking` - ブロッキングノードかどうか
-    /// * `name` - ノードの名前
-    /// * `choice` - エッジの判断方法
     pub fn new(
-        #[cfg(all(feature = "serialize", not(test)))] id: Uuid,
+        config: NodeConfig,
         inputs: Vec<Arc<Edge>>,
         manage_cnt: usize,
         outputs: Vec<Arc<Edge>>,
-        func: Box<AsyncFn>,
-        is_blocking: bool,
-        name: &'static str,
-        choice: Choice,
     ) -> Self {
+        let id = if let Some(id) = config.id {
+            NodeId(id)
+        } else {
+            NodeId::new()
+        };
         Node {
-            #[cfg(all(feature = "serialize", not(test)))]
-            id: NodeId(id),
-            #[cfg(any(not(feature = "serialize"), test))]
-            id: NodeId::new(),
+            id,
             inputs,
             manage_cnt,
             outputs,
-            func,
-            is_blocking,
-            choice,
-            name,
+            func: config.func,
+            is_blocking: config.is_blocking,
+            choice: config.choice,
+            name: config.name,
         }
     }
 
@@ -130,15 +159,14 @@ impl Node {
         name: &'static str,
         choice: Choice,
     ) -> Self {
-        Self::new(
-            inputs,
-            0,
-            outputs,
-            Box::new(|_, _, _| Box::pin(async {})),
-            false,
-            name,
+        let config = NodeConfig {
+            id: None,
+            func: Box::new(|_, _, _| Box::pin(async {})),
+            is_blocking: false,
             choice,
-        )
+            name,
+        };
+        Self::new(config, inputs, 0, outputs)
     }
 
     /// 入力エッジの取得

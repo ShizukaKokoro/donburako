@@ -446,7 +446,7 @@ impl Operator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::node::Choice;
+    use crate::node::{Choice, NodeConfig};
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
@@ -523,27 +523,29 @@ mod test {
         let edge = Arc::new(Edge::new::<&str>());
         let edge_to = Arc::new(Edge::new::<&str>());
         let node = Node::new(
+            NodeConfig::new(
+                Box::new(|self_, op, exec_id| {
+                    Box::pin(async move {
+                        let mut cons = op.get_container(self_.inputs(), exec_id).await;
+                        let mut con = cons.pop_front().unwrap();
+                        let _: &str = con.take().unwrap();
+                        tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                        let mut output_cons = VecDeque::new();
+                        let mut con_clone = con.clone_container().unwrap();
+                        con_clone.store("test");
+                        output_cons.push_back(con_clone);
+                        op.add_container(self_.outputs(), exec_id, output_cons)
+                            .await
+                            .unwrap();
+                    })
+                }),
+                false,
+                Choice::All,
+                "node",
+            ),
             vec![edge.clone()],
             0,
             vec![edge_to.clone()],
-            Box::new(|self_, op, exec_id| {
-                Box::pin(async move {
-                    let mut cons = op.get_container(self_.inputs(), exec_id).await;
-                    let mut con = cons.pop_front().unwrap();
-                    let _: &str = con.take().unwrap();
-                    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
-                    let mut output_cons = VecDeque::new();
-                    let mut con_clone = con.clone_container().unwrap();
-                    con_clone.store("test");
-                    output_cons.push_back(con_clone);
-                    op.add_container(self_.outputs(), exec_id, output_cons)
-                        .await
-                        .unwrap();
-                })
-            }),
-            false,
-            "node",
-            Choice::All,
         );
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
