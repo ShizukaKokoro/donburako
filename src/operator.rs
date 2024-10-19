@@ -476,9 +476,10 @@ mod test {
 
     #[tokio::test]
     async fn test_operator_start_workflow() {
-        let op = Operator::new(vec![]);
-        let exec_id = ExecutorId::default();
         let wf_id = WorkflowId::new("test");
+        let builder = WorkflowBuilder::default();
+        let op = Operator::new(vec![(wf_id, builder)]);
+        let exec_id = ExecutorId::default();
         op.start_workflow(exec_id, wf_id, None).await;
         let executors = op.executors.lock().await;
         assert_eq!(
