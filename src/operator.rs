@@ -452,7 +452,12 @@ mod test {
     async fn test_operator_enqueue_node_if_executable() {
         let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
+        let node = Arc::new(Node::new_test(
+            vec![edge.clone()],
+            vec![],
+            "node",
+            Choice::All,
+        ));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
@@ -489,7 +494,12 @@ mod test {
     async fn test_operator_get_next_node() {
         let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
-        let node = Arc::new(Node::new_test(vec![edge.clone()], "node", Choice::All));
+        let node = Arc::new(Node::new_test(
+            vec![edge.clone()],
+            vec![],
+            "node",
+            Choice::All,
+        ));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
@@ -510,10 +520,11 @@ mod test {
     async fn test_workflow_wait_finish() {
         let wf_id = WorkflowId::new("test");
         let edge = Arc::new(Edge::new::<&str>());
-        let mut node = Node::new(
+        let edge_to = Arc::new(Edge::new::<&str>());
+        let node = Node::new(
             vec![edge.clone()],
             0,
-            vec![],
+            vec![edge_to.clone()],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
                     let mut cons = op.get_container(self_.inputs(), exec_id).await;
@@ -533,7 +544,6 @@ mod test {
             "node",
             Choice::All,
         );
-        let edge_to = node.add_output::<&str>();
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();

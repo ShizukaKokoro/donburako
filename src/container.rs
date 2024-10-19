@@ -377,6 +377,7 @@ mod tests {
 
         let node = Arc::new(Node::new_test(
             vec![edge0.clone(), edge1.clone()],
+            vec![],
             "node",
             Choice::All,
         ));
@@ -396,6 +397,7 @@ mod tests {
 
         let node = Arc::new(Node::new_test(
             vec![edge0.clone(), edge1.clone()],
+            vec![],
             "node",
             Choice::Any,
         ));

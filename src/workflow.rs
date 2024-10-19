@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder() {
-        let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
+        let node = Arc::new(Node::new_test(vec![], vec![], "node", Choice::All));
         let wf = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_add_node() {
-        let node = Arc::new(Node::new_test(vec![], "node", Choice::All));
+        let node = Arc::new(Node::new_test(vec![], vec![], "node", Choice::All));
         let wf_err = WorkflowBuilder::default()
             .add_node(node.clone())
             .unwrap()
@@ -174,9 +174,9 @@ mod tests {
 
     #[test]
     fn test_workflow_builder_multi_node() {
-        let mut node0 = Node::new_test(vec![], "node0", Choice::All);
-        let edge = node0.add_output::<i32>();
-        let node1 = Node::new_test(vec![edge.clone()], "node1", Choice::All);
+        let edge = Arc::new(Edge::new::<i32>());
+        let node0 = Node::new_test(vec![], vec![edge.clone()], "node0", Choice::All);
+        let node1 = Node::new_test(vec![edge.clone()], vec![], "node1", Choice::All);
         let wf = WorkflowBuilder::default()
             .add_node(Arc::new(node0))
             .unwrap()
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_workflow_get_node() {
         let edge = Arc::new(Edge::new::<i32>());
-        let node0 = Node::new_test(vec![edge.clone()], "node0", Choice::All);
+        let node0 = Node::new_test(vec![edge.clone()], vec![], "node0", Choice::All);
         let node0_rc = Arc::new(node0);
         let wf = WorkflowBuilder::default()
             .add_node(node0_rc.clone())

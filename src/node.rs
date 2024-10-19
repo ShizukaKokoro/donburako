@@ -120,23 +120,21 @@ impl Node {
 
     /// テスト用のノードの生成
     #[cfg(test)]
-    pub fn new_test(inputs: Vec<Arc<Edge>>, name: &'static str, choice: Choice) -> Self {
+    pub fn new_test(
+        inputs: Vec<Arc<Edge>>,
+        outputs: Vec<Arc<Edge>>,
+        name: &'static str,
+        choice: Choice,
+    ) -> Self {
         Self::new(
             inputs,
             0,
-            vec![],
+            outputs,
             Box::new(|_, _, _| Box::pin(async {})),
             false,
             name,
             choice,
         )
-    }
-
-    /// 出力エッジの追加
-    pub fn add_output<T: 'static + Send + Sync>(&mut self) -> Arc<Edge> {
-        let edge = Arc::new(Edge::new::<T>());
-        self.outputs.push(edge.clone());
-        edge
     }
 
     /// 入力エッジの取得
