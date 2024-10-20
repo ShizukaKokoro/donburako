@@ -69,7 +69,7 @@ enum State {
     /// 実行中
     ///
     /// ワークフローIDと終了通知用のチャンネルと無視する残りのエッジ数
-    Running(WorkflowId, Option<oneshot::Sender<()>>, usize),
+    Running(WorkflowId, oneshot::Sender<()>, usize),
     /// 終了
     ///
     /// ワークフローID
@@ -158,9 +158,9 @@ impl Operator {
         &self,
         exec_id: ExecutorId,
         wf_id: WorkflowId,
-        tx: Option<oneshot::Sender<()>>,
-    ) {
+    ) -> oneshot::Receiver<()> {
         info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        let (tx, rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self
             .executors
@@ -171,6 +171,7 @@ impl Operator {
         for node in self.workflows[&wf_id].start_nodes() {
             queue_lock.push(node.clone(), exec_id);
         }
+        rx
     }
 
     /// 新しいコンテナの追加
@@ -349,9 +350,7 @@ impl Operator {
                     return;
                 }
             }
-            if let Some(tx) = tx {
-                let _ = tx.send(());
-            }
+            let _ = tx.send(());
             wf_id
         } else {
             return;
@@ -426,9 +425,7 @@ impl Operator {
             let mut exec = self.executors.lock().await;
             let wf_id = match exec.remove(&exec_id) {
                 Some(State::Running(wf_id, tx, _)) => {
-                    if let Some(tx) = tx {
-                        let _ = tx.send(());
-                    }
+                    let _ = tx.send(());
                     wf_id
                 }
                 Some(State::Finished(wf_id)) => wf_id,
@@ -469,7 +466,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        op.start_workflow(exec_id, wf_id, None).await;
+        let rx = op.start_workflow(exec_id, wf_id).await;
+        drop(rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -488,7 +486,8 @@ mod test {
         let builder = WorkflowBuilder::default();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        op.start_workflow(exec_id, wf_id, None).await;
+        let rx = op.start_workflow(exec_id, wf_id).await;
+        drop(rx);
         let executors = op.executors.lock().await;
         assert_eq!(
             match executors.get(&exec_id).unwrap() {
@@ -512,7 +511,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        op.start_workflow(exec_id, wf_id, None).await;
+        let rx = op.start_workflow(exec_id, wf_id).await;
+        drop(rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -556,8 +556,7 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let (tx, rx) = oneshot::channel();
-        op.start_workflow(exec_id, wf_id, Some(tx)).await;
+        let rx = op.start_workflow(exec_id, wf_id).await;
         op.add_new_container(edge, exec_id, "test").await.unwrap();
         let node = op.get_next_node().await.unwrap().0;
         let f = node.run(&op, exec_id);

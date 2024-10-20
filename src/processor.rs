@@ -252,10 +252,10 @@ impl Processor {
     /// # Arguments
     ///
     /// * `wf_id` - ワークフローID
-    pub async fn start(&self, wf_id: WorkflowId) -> ExecutorId {
+    pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
         let id = ExecutorId::new();
-        self.op.start_workflow(id, wf_id, None).await;
-        id
+        let rx = self.op.start_workflow(id, wf_id).await;
+        (id, rx)
     }
 
     /// データを設定
