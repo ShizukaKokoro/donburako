@@ -422,7 +422,12 @@ impl Operator {
         {
             let mut exec = self.executors.lock().await;
             let wf_id = match exec.remove(&exec_id) {
-                Some(State::Running(wf_id, _, _)) => wf_id,
+                Some(State::Running(wf_id, tx, _)) => {
+                    if let Some(tx) = tx {
+                        let _ = tx.send(());
+                    }
+                    wf_id
+                }
                 Some(State::Finished(wf_id)) => wf_id,
                 Some(State::WaitTimer(wf_id)) => wf_id,
                 None => return,
