@@ -34,11 +34,7 @@ pub enum ProcessorError {
     NotFinishedEdge,
 }
 
-type Handler<T> = (
-    JoinHandle<Result<T, ProcessorError>>,
-    ExecutorId,
-    oneshot::Receiver<()>,
-);
+type Handler<T> = (JoinHandle<T>, ExecutorId, oneshot::Receiver<()>);
 
 /// ハンドラ管理
 struct Handlers<T> {
@@ -56,12 +52,7 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(
-        &mut self,
-        handle: JoinHandle<Result<T, ProcessorError>>,
-        exec_id: ExecutorId,
-        rx: oneshot::Receiver<()>,
-    ) {
+    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId, rx: oneshot::Receiver<()>) {
         if let Some(retain) = self.retains.pop_front() {
             self.handles[retain] = Some((handle, exec_id, rx));
             #[cfg(feature = "dev")]
@@ -117,7 +108,7 @@ impl ProcessorBuilder {
     }
 
     /// ビルド
-    pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
+    pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
         let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
@@ -166,7 +157,7 @@ impl ProcessorBuilder {
                                             node.run(&op_clone, exec_id).await;
                                         });
                                         tx.send(()).unwrap();
-                                        Ok(node.name())
+                                        node.name()
                                     }),
                                     exec_id,
                                     rx,
@@ -178,7 +169,7 @@ impl ProcessorBuilder {
                                         spawn(async move {
                                             node.run(&op_clone, exec_id).await;
                                             tx.send(()).unwrap();
-                                            Ok(node.name())
+                                            node.name()
                                         }),
                                         exec_id,
                                         rx,
@@ -191,7 +182,7 @@ impl ProcessorBuilder {
                                         .spawn(async move {
                                             node.run(&op_clone, exec_id).await;
                                             tx.send(()).unwrap();
-                                            Ok(node.name())
+                                            node.name()
                                         })
                                         .unwrap(),
                                     exec_id,
@@ -210,7 +201,7 @@ impl ProcessorBuilder {
                 }
                 for (key, (handle, exec_id, rx)) in handlers.iter() {
                     if rx.try_recv().is_ok() {
-                        debug!("Task is finished: {:?}", handle.await.unwrap().unwrap());
+                        debug!("Task is finished: {:?}", handle.await.unwrap());
                         finished.push(key);
                     }
                     let is_finished = op.is_finished(*exec_id).await;
@@ -237,22 +228,21 @@ impl ProcessorBuilder {
                     handlers.remove(key);
                 }
             }
-            Ok(())
         });
 
-        Ok(Processor {
+        Processor {
             op: op_clone,
             handle,
             cancel,
             shutdown_token,
-        })
+        }
     }
 }
 
 /// プロセッサー
 pub struct Processor {
     op: Operator,
-    handle: JoinHandle<Result<(), ProcessorError>>,
+    handle: JoinHandle<()>,
     cancel: CancellationToken,
     shutdown_token: CancellationToken,
 }
@@ -319,10 +309,9 @@ impl Processor {
     }
 
     /// プロセッサーの待機
-    pub async fn wait(self) -> Result<(), ProcessorError> {
+    pub async fn wait(self) {
         info!("Wait processor");
-        self.handle.await.unwrap()?;
-        Ok(())
+        self.handle.await.unwrap();
     }
 }
 
@@ -334,9 +323,9 @@ mod tests {
     #[tokio::test]
     async fn test_handlers() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(()) });
-        let handle1 = spawn(async { Ok(()) });
-        let handle2 = spawn(async { Ok(()) });
+        let handle0 = spawn(async {});
+        let handle1 = spawn(async {});
+        let handle2 = spawn(async {});
         let (_, rx0) = oneshot::channel();
         let (_, rx1) = oneshot::channel();
         let (_, rx2) = oneshot::channel();
@@ -358,9 +347,9 @@ mod tests {
     #[tokio::test]
     async fn test_handlers_iter_filtered() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(0) });
-        let handle1 = spawn(async { Ok(1) });
-        let handle2 = spawn(async { Ok(2) });
+        let handle0 = spawn(async { 0 });
+        let handle1 = spawn(async { 1 });
+        let handle2 = spawn(async { 2 });
         let (_, rx0) = oneshot::channel();
         let (_, rx1) = oneshot::channel();
         let (_, rx2) = oneshot::channel();
@@ -382,10 +371,10 @@ mod tests {
     #[tokio::test]
     async fn test_handlers_remove() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(0) });
-        let handle1 = spawn(async { Ok(1) });
-        let handle2 = spawn(async { Ok(2) });
-        let handle3 = spawn(async { Ok(3) });
+        let handle0 = spawn(async { 0 });
+        let handle1 = spawn(async { 1 });
+        let handle2 = spawn(async { 2 });
+        let handle3 = spawn(async { 3 });
         let (_, rx0) = oneshot::channel();
         let (_, rx1) = oneshot::channel();
         let (_, rx2) = oneshot::channel();
@@ -401,7 +390,7 @@ mod tests {
         let mut iter_index = Vec::new();
 
         for (key, (handle, _, _)) in handlers.iter() {
-            let res = handle.await.unwrap().unwrap();
+            let res = handle.await.unwrap();
             iter_index.push((key, res));
         }
         assert_eq!(iter_index, vec![(0, 0), (1, 3), (2, 2)]);
