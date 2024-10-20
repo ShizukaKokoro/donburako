@@ -372,7 +372,10 @@ impl Operator {
         let exec = self.executors.lock().await;
 
         #[cfg(feature = "dev")]
-        let result = matches!(exec.get(&exec_id), Some(State::Finished(_)));
+        let result = matches!(
+            exec.get(&exec_id),
+            Some(State::Finished(_)) | Some(State::WaitTimer(_))
+        );
         #[cfg(not(feature = "dev"))]
         let result = matches!(exec.get(&exec_id), Some(State::Finished(_)));
         result
