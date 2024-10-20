@@ -368,16 +368,11 @@ impl Operator {
     ///
     /// ワークフローが終了していない場合は false、終了している場合は true
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
-        let exec = self.executors.lock().await;
-
-        #[cfg(feature = "dev")]
-        let result = matches!(
-            exec.get(&exec_id),
-            Some(State::Finished(_)) | Some(State::WaitTimer(_))
-        );
-        #[cfg(not(feature = "dev"))]
-        let result = matches!(exec.get(&exec_id), Some(State::Finished(_)));
-        result
+        self.executors
+            .lock()
+            .await
+            .get(&exec_id)
+            .map_or(false, |state| !matches!(state, State::Running(_, _, _)))
     }
 
     /// 終了したワークフローから全てのコンテナがなくなっているか確認する
@@ -438,8 +433,11 @@ impl Operator {
 
     /// 全てのワークフローが終了しているか確認する
     pub async fn check_all_finished(&self) -> bool {
-        let exec = self.executors.lock().await;
-        exec.is_empty()
+        self.executors
+            .lock()
+            .await
+            .iter()
+            .all(|(_, state)| !matches!(state, State::Running(_, _, _)))
     }
 
     #[cfg(feature = "dev")]
