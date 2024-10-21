@@ -198,6 +198,7 @@ impl Operator {
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), OperatorError> {
+        debug!("Add new container");
         let mut cons_lock = self.containers.lock().await;
         cons_lock.add_new_container(edge.clone(), exec_id, data)?;
         self.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
@@ -220,6 +221,7 @@ impl Operator {
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
     ) -> VecDeque<Container> {
+        debug!("Get container");
         let mut containers = VecDeque::new();
         let mut cons_lock = self.containers.lock().await;
         for e in edge {
@@ -243,13 +245,14 @@ impl Operator {
     /// # Returns
     ///
     /// 成功した場合は Ok(())
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, container))]
     pub async fn add_container(
         &self,
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
+        debug!("Add container: {:?}", container);
         let mut cons_lock = self.containers.lock().await;
         for (e, c) in edge.iter().zip(container) {
             cons_lock.add_container(e.clone(), exec_id, c)?;
