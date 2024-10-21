@@ -5,7 +5,6 @@
 use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
-use log::{debug, info, trace};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use thiserror::Error;
@@ -13,6 +12,7 @@ use tokio::runtime::Handle;
 use tokio::sync::oneshot;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, info, trace};
 
 /// プロセッサーエラー
 #[derive(Debug, Error, PartialEq)]

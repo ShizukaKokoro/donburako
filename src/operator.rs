@@ -4,11 +4,11 @@ use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
 use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
-use log::{debug, info};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{oneshot, Mutex, MutexGuard};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -191,6 +191,7 @@ impl Operator {
     /// # Returns
     ///
     /// 成功した場合は Ok(())
+    #[tracing::instrument(skip(self, data))]
     pub(crate) async fn add_new_container<T: 'static + Send + Sync>(
         &self,
         edge: Arc<Edge>,
@@ -213,6 +214,7 @@ impl Operator {
     /// # Returns
     ///
     /// コンテナ
+    #[tracing::instrument(skip(self))]
     pub async fn get_container(
         &self,
         edge: &[Arc<Edge>],
@@ -241,6 +243,7 @@ impl Operator {
     /// # Returns
     ///
     /// 成功した場合は Ok(())
+    #[tracing::instrument(skip(self))]
     pub async fn add_container(
         &self,
         edge: &[Arc<Edge>],
@@ -265,6 +268,7 @@ impl Operator {
     /// # Returns
     ///
     /// 成功した場合は Ok(())
+    #[tracing::instrument(skip(self))]
     async fn enqueue_node_if_executable(
         &self,
         edge: &[Arc<Edge>],
@@ -333,6 +337,7 @@ impl Operator {
         None
     }
 
+    #[tracing::instrument(skip(self))]
     fn check_finish(
         &self,
         exec_id: ExecutorId,
@@ -368,6 +373,7 @@ impl Operator {
     /// # Returns
     ///
     /// ワークフローが終了していない場合は false、終了している場合は true
+    #[tracing::instrument(skip(self))]
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         self.executors
             .lock()
@@ -387,6 +393,7 @@ impl Operator {
     /// # Returns
     ///
     /// 全てのコンテナがなくなっている場合は true、残っている場合は false
+    #[tracing::instrument(skip(self))]
     pub(crate) async fn check_all_containers_taken(&self, exec_id: ExecutorId) -> bool {
         if let Some(wf_id) = self.get_wf_id(exec_id).await {
             let (_, end) = self.get_start_end_edges(&wf_id);
@@ -411,8 +418,9 @@ impl Operator {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
+    #[tracing::instrument(skip(self))]
     pub async fn finish_workflow_by_execute_id(&self, exec_id: ExecutorId) {
-        debug!("Ending workflow: {:?}", exec_id);
+        debug!("Ending workflow");
         self.containers.lock().await.finish_containers(exec_id);
         #[cfg(not(feature = "dev"))]
         let _ = self.executors.lock().await.remove(&exec_id);
@@ -433,6 +441,7 @@ impl Operator {
     }
 
     /// 全てのワークフローが終了しているか確認する
+    #[tracing::instrument(skip(self))]
     pub async fn check_all_finished(&self) -> bool {
         self.executors
             .lock()
@@ -453,7 +462,7 @@ impl Operator {
         let wf_id = self.get_wf_id(exec_id).await.unwrap();
         let mut time = self.time.lock().await;
         if let Some(inst) = time.remove(&(wf_id, exec_id)) {
-            log::info!(
+            tracing::info!(
                 "{:?}({:?}) is finished in {:?}",
                 wf_id,
                 exec_id,

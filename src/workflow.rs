@@ -4,7 +4,7 @@
 
 use crate::edge::Edge;
 use crate::node::Node;
-use log::debug;
+use tracing::debug;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
