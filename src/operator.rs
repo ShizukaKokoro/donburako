@@ -157,25 +157,24 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     /// * `wf_id` - ワークフローID
-    /// * `tx` - 終了通知用のチャンネル
     pub async fn start_workflow(
         &self,
         exec_id: ExecutorId,
         wf_id: WorkflowId,
     ) -> oneshot::Receiver<()> {
         info!("Start workflow: {:?}({:?})", wf_id, exec_id);
-        let (tx, rx) = oneshot::channel();
+        let (wf_tx, wf_rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self
             .executors
             .lock()
             .await
-            .insert(exec_id, State::Running(wf_id, tx, ignore_cnt));
+            .insert(exec_id, State::Running(wf_id, wf_tx, ignore_cnt));
         let mut queue_lock = self.queue.lock().await;
         for node in self.workflows[&wf_id].start_nodes() {
             queue_lock.push(node.clone(), exec_id);
         }
-        rx
+        wf_rx
     }
 
     /// 新しいコンテナの追加
@@ -347,19 +346,19 @@ impl Operator {
         exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
         cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) {
-        let wf_id = if let Some(State::Running(wf_id, tx, ignore_cnt)) = exec.remove(&exec_id) {
+        let wf_id = if let Some(State::Running(wf_id, wf_tx, ignore_cnt)) = exec.remove(&exec_id) {
             for end in self.workflows[&wf_id].end_edges() {
                 if self.workflows[&wf_id].ignore_edges().contains(end) {
                     continue;
                 }
                 if !cons_lock.check_edge_exists(end.clone(), exec_id) {
                     assert!(exec
-                        .insert(exec_id, State::Running(wf_id, tx, ignore_cnt))
+                        .insert(exec_id, State::Running(wf_id, wf_tx, ignore_cnt))
                         .is_none());
                     return;
                 }
             }
-            let _ = tx.send(());
+            let _ = wf_tx.send(());
             wf_id
         } else {
             return;
@@ -431,8 +430,8 @@ impl Operator {
         {
             let mut exec = self.executors.lock().await;
             let wf_id = match exec.remove(&exec_id) {
-                Some(State::Running(wf_id, tx, _)) => {
-                    let _ = tx.send(());
+                Some(State::Running(wf_id, wf_tx, _)) => {
+                    let _ = wf_tx.send(());
                     wf_id
                 }
                 Some(State::Finished(wf_id)) => wf_id,
@@ -494,8 +493,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let rx = op.start_workflow(exec_id, wf_id).await;
-        drop(rx);
+        let wf_rx = op.start_workflow(exec_id, wf_id).await;
+        drop(wf_rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -539,8 +538,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let rx = op.start_workflow(exec_id, wf_id).await;
-        drop(rx);
+        let wf_rx = op.start_workflow(exec_id, wf_id).await;
+        drop(wf_rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -584,7 +583,7 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let rx = op.start_workflow(exec_id, wf_id).await;
+        let wf_rx = op.start_workflow(exec_id, wf_id).await;
         op.add_new_container(edge, exec_id, "test").await.unwrap();
         let node = op.get_next_node().await.unwrap().0;
         let f = node.run(&op, exec_id);
@@ -595,7 +594,7 @@ mod test {
             .await
             .is_empty());
         f.await;
-        rx.await.unwrap();
+        wf_rx.await.unwrap();
         assert_eq!(op.get_container(&[edge_to], exec_id).await.len(), 1);
         let is_finished = op.is_finished(exec_id).await;
         assert!(is_finished);

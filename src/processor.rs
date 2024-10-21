@@ -52,9 +52,9 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId, rx: oneshot::Receiver<()>) {
+    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId, node_rx: oneshot::Receiver<()>) {
         if let Some(retain) = self.retains.pop_front() {
-            self.handles[retain] = Some((handle, exec_id, rx));
+            self.handles[retain] = Some((handle, exec_id, node_rx));
             #[cfg(feature = "dev")]
             debug!(
                 "{:?} tasks are running",
@@ -133,13 +133,13 @@ impl ProcessorBuilder {
                     trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
-                    let (handle, exec_id, rx) =
+                    let (handle, exec_id, node_rx) =
                         if let Some((node, exec_id)) = op.get_next_node().await {
                             #[cfg(feature = "dev")]
                             op.start_timer(exec_id).await;
                             let op_clone = op.clone();
                             debug!("Task is started: {:?}", node.name());
-                            let (tx, rx) = oneshot::channel();
+                            let (node_tx, node_rx) = oneshot::channel();
                             if node.is_blocking() {
                                 let rt_handle = Handle::current();
                                 (
@@ -147,11 +147,11 @@ impl ProcessorBuilder {
                                         rt_handle.block_on(async {
                                             node.run(&op_clone, exec_id).await;
                                         });
-                                        tx.send(()).unwrap();
+                                        node_tx.send(()).unwrap();
                                         node.name()
                                     }),
                                     exec_id,
-                                    rx,
+                                    node_rx,
                                 )
                             } else {
                                 #[cfg(not(feature = "dev"))]
@@ -159,11 +159,11 @@ impl ProcessorBuilder {
                                     (
                                         spawn(async move {
                                             node.run(&op_clone, exec_id).await;
-                                            tx.send(()).unwrap();
+                                            node_tx.send(()).unwrap();
                                             node.name()
                                         }),
                                         exec_id,
-                                        rx,
+                                        node_rx,
                                     )
                                 }
                                 #[cfg(feature = "dev")]
@@ -172,26 +172,26 @@ impl ProcessorBuilder {
                                         .name(node.name())
                                         .spawn(async move {
                                             node.run(&op_clone, exec_id).await;
-                                            tx.send(()).unwrap();
+                                            node_tx.send(()).unwrap();
                                             node.name()
                                         })
                                         .unwrap(),
                                     exec_id,
-                                    rx,
+                                    node_rx,
                                 )
                             }
                         } else {
                             break;
                         };
-                    handlers.push(handle, exec_id, rx);
+                    handlers.push(handle, exec_id, node_rx);
                 }
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
                     trace!("Check running tasks");
                 }
-                for (key, (handle, exec_id, rx)) in handlers.iter() {
-                    if rx.try_recv().is_ok() {
+                for (key, (handle, exec_id, node_rx)) in handlers.iter() {
+                    if node_rx.try_recv().is_ok() {
                         if let Ok(name) = handle.await {
                             debug!("Task is finished: {:?}", name);
                         }
@@ -236,8 +236,8 @@ impl Processor {
     /// * `wf_id` - ワークフローID
     pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
         let id = ExecutorId::new();
-        let rx = self.op.start_workflow(id, wf_id).await;
-        (id, rx)
+        let wf_rx = self.op.start_workflow(id, wf_id).await;
+        (id, wf_rx)
     }
 
     /// データを設定
@@ -308,14 +308,14 @@ mod tests {
         let handle0 = spawn(async {});
         let handle1 = spawn(async {});
         let handle2 = spawn(async {});
-        let (_, rx0) = oneshot::channel();
-        let (_, rx1) = oneshot::channel();
-        let (_, rx2) = oneshot::channel();
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id, rx0);
-        handlers.push(handle1, exec_id, rx1);
-        handlers.push(handle2, exec_id, rx2);
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
 
         assert_eq!(handlers.handles.len(), 3);
 
@@ -332,14 +332,14 @@ mod tests {
         let handle0 = spawn(async { 0 });
         let handle1 = spawn(async { 1 });
         let handle2 = spawn(async { 2 });
-        let (_, rx0) = oneshot::channel();
-        let (_, rx1) = oneshot::channel();
-        let (_, rx2) = oneshot::channel();
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id, rx0);
-        handlers.push(handle1, exec_id, rx1);
-        handlers.push(handle2, exec_id, rx2);
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
         handlers.remove(1);
 
         let mut iter_key = Vec::new();
@@ -357,17 +357,17 @@ mod tests {
         let handle1 = spawn(async { 1 });
         let handle2 = spawn(async { 2 });
         let handle3 = spawn(async { 3 });
-        let (_, rx0) = oneshot::channel();
-        let (_, rx1) = oneshot::channel();
-        let (_, rx2) = oneshot::channel();
-        let (_, rx3) = oneshot::channel();
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
+        let (_, node_rx3) = oneshot::channel();
 
         let exec_id = ExecutorId::new();
-        handlers.push(handle0, exec_id, rx0);
-        handlers.push(handle1, exec_id, rx1);
-        handlers.push(handle2, exec_id, rx2);
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
         handlers.remove(1);
-        handlers.push(handle3, exec_id, rx3);
+        handlers.push(handle3, exec_id, node_rx3);
 
         let mut iter_index = Vec::new();
 
