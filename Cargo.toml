@@ -6,15 +6,6 @@ authors.workspace = true
 
 [dependencies]
 uuid.workspace = true
-<<<<<<< HEAD
-thiserror.workspace = true
-tokio = { workspace = true }
-tokio-util.workspace = true
-log.workspace = true
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["rt"] }
-=======
 tokio = { workspace = true }
 tokio-util.workspace = true
 thiserror.workspace = true
@@ -29,4 +20,3 @@ pretty_assertions.workspace = true
 [features]
 default = []
 dev = ["console-subscriber", "tracing-subscriber"]
->>>>>>> refactor-iter_by_sub_workflow
