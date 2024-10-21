@@ -90,6 +90,8 @@ pub struct Operator {
     containers: Arc<Mutex<ContainerMap>>,
     executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
     queue: Arc<Mutex<ExecutableQueue>>,
+    #[cfg(feature = "dev")]
+    time: Arc<Mutex<HashMap<(WorkflowId, ExecutorId), std::time::Instant>>>,
 }
 impl Operator {
     /// 新しいオペレーターの生成
@@ -107,6 +109,8 @@ impl Operator {
             containers: Arc::new(Mutex::new(ContainerMap::default())),
             executors: Arc::new(Mutex::new(HashMap::new())),
             queue: Arc::new(Mutex::new(ExecutableQueue::default())),
+            #[cfg(feature = "dev")]
+            time: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -276,9 +280,6 @@ impl Operator {
                 State::WaitTimer(wf_id) => (wf_id, 0),
             }
         } else {
-            #[cfg(feature = "dev")]
-            return Err(OperatorError::NotStarted(format!("{:?}", exec_id)));
-            #[cfg(not(feature = "dev"))]
             return Ok(());
         };
         let mut finish = false;
@@ -441,7 +442,24 @@ impl Operator {
     }
 
     #[cfg(feature = "dev")]
-    pub(crate) async fn remove_wait_timer(&self, exec_id: ExecutorId) {
+    pub(crate) async fn start_timer(&self, exec_id: ExecutorId) {
+        let wf_id = self.get_wf_id(exec_id).await.unwrap();
+        let mut time = self.time.lock().await;
+        let _ = time.insert((wf_id, exec_id), std::time::Instant::now());
+    }
+
+    #[cfg(feature = "dev")]
+    pub(crate) async fn stop_timer(&self, exec_id: ExecutorId) {
+        let wf_id = self.get_wf_id(exec_id).await.unwrap();
+        let mut time = self.time.lock().await;
+        if let Some(inst) = time.remove(&(wf_id, exec_id)) {
+            log::info!(
+                "{:?}({:?}) is finished in {:?}",
+                wf_id,
+                exec_id,
+                inst.elapsed()
+            );
+        }
         let _ = self.executors.lock().await.remove(&exec_id);
     }
 }

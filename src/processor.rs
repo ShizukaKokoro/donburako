@@ -112,11 +112,6 @@ impl ProcessorBuilder {
         debug!("Start building processor");
         let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
-        #[cfg(feature = "dev")]
-        let mut time: std::collections::HashMap<
-            (WorkflowId, ExecutorId),
-            std::time::Instant,
-        > = std::collections::HashMap::new();
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
@@ -141,11 +136,7 @@ impl ProcessorBuilder {
                     let (handle, exec_id, rx) =
                         if let Some((node, exec_id)) = op.get_next_node().await {
                             #[cfg(feature = "dev")]
-                            {
-                                let wf_id = op.get_wf_id(exec_id).await.unwrap();
-                                let key = (wf_id, exec_id);
-                                let _ = time.entry(key).or_insert_with(std::time::Instant::now);
-                            }
+                            op.start_timer(exec_id).await;
                             let op_clone = op.clone();
                             debug!("Task is started: {:?}", node.name());
                             let (tx, rx) = oneshot::channel();
@@ -207,18 +198,7 @@ impl ProcessorBuilder {
                     let is_finished = op.is_finished(*exec_id).await;
                     if is_finished {
                         #[cfg(feature = "dev")]
-                        {
-                            let wf_id = op.get_wf_id(*exec_id).await.unwrap();
-                            if let Some(inst) = time.remove(&(wf_id, *exec_id)) {
-                                log::info!(
-                                    "{:?}({:?}) is finished in {:?}",
-                                    wf_id,
-                                    exec_id,
-                                    inst.elapsed()
-                                );
-                            }
-                            op.remove_wait_timer(*exec_id).await;
-                        }
+                        op.stop_timer(*exec_id).await;
                         if op.check_all_containers_taken(*exec_id).await {
                             op.finish_workflow_by_execute_id(*exec_id).await;
                         }

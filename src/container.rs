@@ -7,7 +7,7 @@
 use crate::edge::Edge;
 use crate::node::{Choice, Node};
 use crate::operator::ExecutorId;
-use log::warn;
+use log::{debug, warn};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -248,6 +248,7 @@ impl ContainerMap {
     ///
     /// * `exec_id` - 実行ID
     pub(crate) fn finish_containers(&mut self, exec_id: ExecutorId) {
+        debug!("Finish containers with exec_id: {:?}", exec_id);
         if let Some(con_map) = self.0.get_mut(&exec_id) {
             for (_, container) in con_map.iter_mut() {
                 container.take_anyway();
