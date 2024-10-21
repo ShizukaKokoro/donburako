@@ -9,7 +9,9 @@ uuid.workspace = true
 tokio = { workspace = true }
 tokio-util.workspace = true
 thiserror.workspace = true
-log.workspace = true
+tracing.workspace = true
+fake.workspace = true
+
 
 console-subscriber = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }

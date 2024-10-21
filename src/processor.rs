@@ -2,17 +2,17 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
-use crate::node::edge::Edge;
+use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
-use log::{debug, info};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
+use tokio::sync::oneshot;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, info, trace};
 
 /// プロセッサーエラー
 #[derive(Debug, Error, PartialEq)]
@@ -34,14 +34,16 @@ pub enum ProcessorError {
     NotFinishedEdge,
 }
 
+type Handler<T> = (JoinHandle<T>, ExecutorId, oneshot::Receiver<()>);
+
 /// ハンドラ管理
 struct Handlers<T> {
-    handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>>,
+    handles: Vec<Option<Handler<T>>>,
     retains: VecDeque<usize>,
 }
 impl<T> Handlers<T> {
     fn new(n: usize) -> Self {
-        let mut handles: Vec<Option<JoinHandle<Result<T, ProcessorError>>>> = Vec::with_capacity(n);
+        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
         let mut retains = VecDeque::new();
         for i in 0..n {
             retains.push_back(i);
@@ -50,15 +52,18 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(&mut self, handle: JoinHandle<Result<T, ProcessorError>>) {
+    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId, node_rx: oneshot::Receiver<()>) {
         if let Some(retain) = self.retains.pop_front() {
-            self.handles[retain] = Some(handle);
+            self.handles[retain] = Some((handle, exec_id, node_rx));
+            #[cfg(feature = "dev")]
+            debug!(
+                "{:?} tasks are running",
+                self.handles.len() - self.retains.len()
+            );
         }
     }
 
-    fn iter(
-        &mut self,
-    ) -> impl Iterator<Item = (usize, &mut JoinHandle<Result<T, ProcessorError>>)> {
+    fn iter(&mut self) -> impl Iterator<Item = (usize, &mut Handler<T>)> {
         self.handles
             .iter_mut()
             .enumerate()
@@ -69,6 +74,11 @@ impl<T> Handlers<T> {
     fn remove(&mut self, key: usize) {
         self.retains.push_back(key);
         self.handles[key] = None;
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running",
+            self.handles.len() - self.retains.len()
+        );
     }
 
     fn is_full(&self) -> bool {
@@ -83,9 +93,7 @@ impl<T> Handlers<T> {
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
-    workflow: Vec<WorkflowBuilder>,
-    check_time: Duration,
-    loop_wait_time: Duration,
+    workflow: Vec<(WorkflowId, WorkflowBuilder)>,
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -93,134 +101,132 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `wf` - ワークフロービルダー
-    pub fn add_workflow(self, wf: WorkflowBuilder) -> Self {
+    pub fn add_workflow(self, wf_id: WorkflowId, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
-        wfs.push(wf);
-        Self {
-            workflow: wfs,
-            check_time: Duration::from_micros(10),
-            loop_wait_time: Duration::from_micros(1),
-        }
-    }
-
-    /// チェック時間の設定
-    ///
-    /// # Arguments
-    ///
-    /// * `time` - チェック時間
-    pub fn set_check_time_micros(self, time: u64) -> Self {
-        Self {
-            check_time: Duration::from_micros(time),
-            ..self
-        }
-    }
-
-    /// ループ待機時間の設定
-    ///
-    /// # Arguments
-    ///
-    /// * `time` - ループ待機時間
-    pub fn set_loop_wait_time_micros(self, time: u64) -> Self {
-        Self {
-            loop_wait_time: Duration::from_micros(time),
-            ..self
-        }
+        wfs.push((wf_id, wf));
+        Self { workflow: wfs }
     }
 
     /// ビルド
-    pub fn build(self, n: usize) -> Result<Processor, ProcessorError> {
+    pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
         let mut handlers = Handlers::new(n);
         let op = Operator::new(self.workflow);
-        if !op.is_edge_count_valid() {
-            return Err(ProcessorError::InvalidEdgeCount);
-        }
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
+        let shutdown_token = CancellationToken::new();
+        let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
+            let mut flag = true;
             loop {
-                if cancel_clone.is_cancelled() {
+                if cancel_clone.is_cancelled() || !flag {
                     break;
+                }
+                if shutdown_clone.is_cancelled() && op.check_all_finished().await {
+                    flag = false;
                 }
 
                 if op.has_executable_node().await {
-                    debug!("Get nodes enabled to run");
+                    trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
-                    let handle = if let Some((node, exec_id)) = op.get_next_node().await {
-                        let op_clone = op.clone();
-                        if node.is_blocking() {
-                            let rt_handle = Handle::current();
-                            spawn_blocking(move || {
-                                rt_handle.block_on(async {
-                                    node.run(&op_clone, exec_id).await;
-                                });
-                                Ok(node.name())
-                            })
-                        } else {
-                            #[cfg(not(feature = "dev"))]
-                            {
-                                spawn(async move {
-                                    node.run(&op_clone, exec_id).await;
-                                    Ok(node.name())
-                                })
-                            }
+                    let (handle, exec_id, node_rx) =
+                        if let Some((node, exec_id)) = op.get_next_node().await {
                             #[cfg(feature = "dev")]
-                            tokio::task::Builder::new()
-                                .name(node.name())
-                                .spawn(async move {
-                                    node.run(&op_clone, exec_id).await;
-                                    Ok(node.name())
-                                })
-                                .unwrap()
-                        }
-                    } else {
-                        break;
-                    };
-                    handlers.push(handle);
+                            op.start_timer(exec_id).await;
+                            let op_clone = op.clone();
+                            debug!("Task is started: {:?}", node.name());
+                            let (node_tx, node_rx) = oneshot::channel();
+                            if node.is_blocking() {
+                                let rt_handle = Handle::current();
+                                (
+                                    spawn_blocking(move || {
+                                        rt_handle.block_on(async {
+                                            node.run(&op_clone, exec_id).await;
+                                        });
+                                        node_tx.send(()).unwrap();
+                                        node.name()
+                                    }),
+                                    exec_id,
+                                    node_rx,
+                                )
+                            } else {
+                                #[cfg(not(feature = "dev"))]
+                                {
+                                    (
+                                        spawn(async move {
+                                            node.run(&op_clone, exec_id).await;
+                                            node_tx.send(()).unwrap();
+                                            node.name()
+                                        }),
+                                        exec_id,
+                                        node_rx,
+                                    )
+                                }
+                                #[cfg(feature = "dev")]
+                                (
+                                    tokio::task::Builder::new()
+                                        .name(node.name())
+                                        .spawn(async move {
+                                            node.run(&op_clone, exec_id).await;
+                                            node_tx.send(()).unwrap();
+                                            node.name()
+                                        })
+                                        .unwrap(),
+                                    exec_id,
+                                    node_rx,
+                                )
+                            }
+                        } else {
+                            break;
+                        };
+                    handlers.push(handle, exec_id, node_rx);
                 }
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
-                    debug!("Check running tasks");
+                    trace!("Check running tasks");
                 }
-                for (key, handle) in handlers.iter() {
-                    tokio::select! {
-                            // タスクが終了した場合
-                            res = handle => {
-                                if let Ok(name) = res {
-                                    debug!("Task is done: {:?}", name.unwrap());
-                                }
-                                finished.push(key);
-                            }
-                            // タスクが終了していない場合
-                            _ = tokio::time::sleep(self.check_time) => {}
+                for (key, (handle, exec_id, node_rx)) in handlers.iter() {
+                    if node_rx.try_recv().is_ok() {
+                        if let Ok(name) = handle.await {
+                            debug!("Task is finished: {:?}", name);
+                        }
+                        finished.push(key);
+                    }
+                    let is_finished = op.is_finished(*exec_id).await;
+                    if is_finished {
+                        #[cfg(feature = "dev")]
+                        op.stop_timer(*exec_id).await;
+                        if op.check_all_containers_taken(*exec_id).await {
+                            op.finish_workflow_by_execute_id(*exec_id).await;
+                        }
                     }
                 }
                 for key in finished {
                     handlers.remove(key);
                 }
-                tokio::time::sleep(self.loop_wait_time).await;
             }
-            Ok(())
         });
 
-        Ok(Processor {
+        Processor {
             op: op_clone,
             handle,
             cancel,
-        })
+            shutdown_token,
+        }
     }
 }
 
 /// プロセッサー
 pub struct Processor {
     op: Operator,
-    handle: JoinHandle<Result<(), ProcessorError>>,
+    handle: JoinHandle<()>,
     cancel: CancellationToken,
+    shutdown_token: CancellationToken,
 }
 impl Processor {
     /// ワークフローの開始
@@ -228,11 +234,10 @@ impl Processor {
     /// # Arguments
     ///
     /// * `wf_id` - ワークフローID
-    pub async fn start(&self, wf_id: WorkflowId) -> ExecutorId {
-        info!("Start workflow: {:?}", wf_id);
+    pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
         let id = ExecutorId::new();
-        self.op.start_workflow(id, wf_id).await;
-        id
+        let wf_rx = self.op.start_workflow(id, wf_id).await;
+        (id, wf_rx)
     }
 
     /// データを設定
@@ -263,7 +268,10 @@ impl Processor {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Result<T, ProcessorError> {
-        if let Some(mut con) = self.op.get_container(edge, exec_id).await {
+        let mut cons = self.op.get_container(&[edge], exec_id).await;
+        if cons.len() == 1 {
+            let mut con = cons.pop_front().unwrap();
+            assert_eq!(cons.len(), 0);
             Ok(con.take()?)
         } else {
             Err(ProcessorError::NotFinishedEdge)
@@ -276,11 +284,16 @@ impl Processor {
         self.cancel.cancel();
     }
 
+    /// プロセッサーのシャットダウン
+    pub fn shutdown(&self) {
+        info!("Shutdown processor");
+        self.shutdown_token.cancel();
+    }
+
     /// プロセッサーの待機
-    pub async fn wait(self) -> Result<(), ProcessorError> {
+    pub async fn wait(self) {
         info!("Wait processor");
-        self.handle.await.unwrap()?;
-        Ok(())
+        self.handle.await.unwrap();
     }
 }
 
@@ -292,13 +305,17 @@ mod tests {
     #[tokio::test]
     async fn test_handlers() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(()) });
-        let handle1 = spawn(async { Ok(()) });
-        let handle2 = spawn(async { Ok(()) });
+        let handle0 = spawn(async {});
+        let handle1 = spawn(async {});
+        let handle2 = spawn(async {});
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
 
         assert_eq!(handlers.handles.len(), 3);
 
@@ -312,13 +329,17 @@ mod tests {
     #[tokio::test]
     async fn test_handlers_iter_filtered() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(0) });
-        let handle1 = spawn(async { Ok(1) });
-        let handle2 = spawn(async { Ok(2) });
+        let handle0 = spawn(async { 0 });
+        let handle1 = spawn(async { 1 });
+        let handle2 = spawn(async { 2 });
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
         handlers.remove(1);
 
         let mut iter_key = Vec::new();
@@ -332,25 +353,27 @@ mod tests {
     #[tokio::test]
     async fn test_handlers_remove() {
         let mut handlers = Handlers::new(3);
-        let handle0 = spawn(async { Ok(0) });
-        let handle1 = spawn(async { Ok(1) });
-        let handle2 = spawn(async { Ok(2) });
-        let handle3 = spawn(async { Ok(3) });
+        let handle0 = spawn(async { 0 });
+        let handle1 = spawn(async { 1 });
+        let handle2 = spawn(async { 2 });
+        let handle3 = spawn(async { 3 });
+        let (_, node_rx0) = oneshot::channel();
+        let (_, node_rx1) = oneshot::channel();
+        let (_, node_rx2) = oneshot::channel();
+        let (_, node_rx3) = oneshot::channel();
 
-        handlers.push(handle0);
-        handlers.push(handle1);
-        handlers.push(handle2);
+        let exec_id = ExecutorId::new();
+        handlers.push(handle0, exec_id, node_rx0);
+        handlers.push(handle1, exec_id, node_rx1);
+        handlers.push(handle2, exec_id, node_rx2);
         handlers.remove(1);
-        handlers.push(handle3);
+        handlers.push(handle3, exec_id, node_rx3);
 
         let mut iter_index = Vec::new();
 
-        for (key, handle) in handlers.iter() {
-            tokio::select! {
-                    res = handle => {
-                        iter_index.push((key,res.unwrap().unwrap()));
-                }
-            }
+        for (key, (handle, _, _)) in handlers.iter() {
+            let res = handle.await.unwrap();
+            iter_index.push((key, res));
         }
         assert_eq!(iter_index, vec![(0, 0), (1, 3), (2, 2)]);
 

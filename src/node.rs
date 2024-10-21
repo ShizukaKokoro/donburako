@@ -6,19 +6,10 @@
 //! ノードは実行時に、コンテナが保存されている構造体を受け取り、その中のデータを読み書きすることになる。
 //! ノード同士の繋がりはエッジによって表される。
 
-mod branch;
-pub mod edge;
-mod func;
-mod iter;
-mod rec;
-
-pub use self::branch::{FirstChoiceNode, IfNode};
-pub use self::func::UserNode;
-pub use self::rec::RecursiveNode;
-
-use self::edge::Edge;
+use crate::edge::Edge;
 use crate::operator::{ExecutorId, Operator};
-use crate::workflow::WorkflowId;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
@@ -45,89 +36,149 @@ impl NodeId {
     }
 }
 
+/// エッジの判断方法
+#[derive(Debug)]
+pub enum Choice {
+    /// すべてのエッジ
+    All,
+
+    /// 任意のエッジ
+    Any,
+}
+
+type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+
+type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Operator, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
+
+/// ノードビルダートレイト
+pub trait NodeBuilder {
+    /// ノードビルダーの生成
+    fn new() -> Self;
+
+    /// 出力エッジの取得
+    fn outputs(&self) -> &Vec<Arc<Edge>>;
+
+    /// ノードのビルド
+    ///
+    /// # Arguments
+    ///
+    /// * `inputs` - 入力エッジ
+    /// * `manage_cnt` - 管理エッジを持つかどうか
+    ///
+    /// # Returns
+    ///
+    /// ノードの生成結果。
+    /// 入力のエッジの型が一致しない場合はエラーを返す。
+    fn build(self, inputs: Vec<Arc<Edge>>, manage_cnt: usize) -> Result<Arc<Node>, NodeError>;
+}
+
 /// ノード
 ///
 /// NOTE: サイズが大きめ？
-#[derive(Debug)]
 pub struct Node {
     id: NodeId,
-    kind: NodeType,
+    inputs: Vec<Arc<Edge>>,
+    manage_cnt: usize,
+    outputs: Vec<Arc<Edge>>,
+    func: Box<AsyncFn>,
+    is_blocking: bool,
+    choice: Choice,
     name: &'static str,
 }
 impl Node {
     /// ノードの生成
-    fn new(kind: NodeType, name: &'static str) -> Self {
+    ///
+    /// # Arguments
+    ///
+    /// * `inputs` - 入力エッジ
+    /// * `manage_cnt` - 管理エッジを持つかどうか
+    /// * `outputs` - 出力エッジ
+    /// * `func` - ノードの処理
+    /// * `is_blocking` - ブロッキングノードかどうか
+    /// * `name` - ノードの名前
+    /// * `choice` - エッジの判断方法
+    pub fn new(
+        inputs: Vec<Arc<Edge>>,
+        manage_cnt: usize,
+        outputs: Vec<Arc<Edge>>,
+        func: Box<AsyncFn>,
+        is_blocking: bool,
+        name: &'static str,
+        choice: Choice,
+    ) -> Self {
         Node {
             id: NodeId::new(),
-            kind,
+            inputs,
+            manage_cnt,
+            outputs,
+            func,
+            is_blocking,
+            choice,
             name,
         }
     }
 
-    /// ノードの実行
-    ///
-    /// ノードの種類に応じた処理を実行する。
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - オペレーター
-    pub(crate) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
-        match &self.kind {
-            NodeType::User(node) => node.run(op, exec_id).await,
-            NodeType::If(node) => node.run(op, exec_id).await,
-            NodeType::FirstChoice(node) => node.run(op, exec_id).await,
-            NodeType::Recursive(node) => node.run(op, exec_id).await,
-        }
+    /// テスト用のノードの生成
+    #[cfg(test)]
+    pub fn new_test(
+        inputs: Vec<Arc<Edge>>,
+        outputs: Vec<Arc<Edge>>,
+        name: &'static str,
+        choice: Choice,
+    ) -> Self {
+        Self::new(
+            inputs,
+            0,
+            outputs,
+            Box::new(|_, _, _| Box::pin(async {})),
+            false,
+            name,
+            choice,
+        )
     }
 
     /// 入力エッジの取得
-    pub(crate) fn inputs(&self) -> Vec<Arc<Edge>> {
-        match &self.kind {
-            NodeType::User(node) => node.inputs().clone(),
-            NodeType::If(node) => vec![node.input().clone()],
-            NodeType::FirstChoice(node) => node.inputs().clone(),
-            NodeType::Recursive(node) => node.inputs().clone(),
-        }
+    pub fn inputs(&self) -> &Vec<Arc<Edge>> {
+        &self.inputs
+    }
+
+    /// 管理エッジの数の取得
+    pub fn manage_cnt(&self) -> usize {
+        self.manage_cnt
     }
 
     /// 出力エッジの取得
-    pub(crate) fn outputs(&self) -> Vec<Arc<Edge>> {
-        match &self.kind {
-            NodeType::User(node) => node.outputs().clone(),
-            NodeType::If(node) => vec![node.true_output().clone(), node.false_output().clone()],
-            NodeType::FirstChoice(node) => vec![node.output().clone()],
-            NodeType::Recursive(node) => node.outputs().clone(),
-        }
-    }
-
-    /// ノードの種類の取得
-    pub(crate) fn kind(&self) -> &NodeType {
-        &self.kind
+    pub fn outputs(&self) -> &Vec<Arc<Edge>> {
+        &self.outputs
     }
 
     /// ブロッキングノードかどうか
-    pub(crate) fn is_blocking(&self) -> bool {
-        match &self.kind {
-            NodeType::User(node) => node.is_blocking(),
-            NodeType::If(_) => false,
-            NodeType::FirstChoice(_) => false,
-            NodeType::Recursive(_) => false,
-        }
+    pub(super) fn is_blocking(&self) -> bool {
+        self.is_blocking
+    }
+
+    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
+        (self.func)(self, op, exec_id).await;
+    }
+    /// エッジの判断方法の取得
+    pub(crate) fn choice(&self) -> &Choice {
+        &self.choice
     }
 
     /// ノードの名前の取得
     pub(crate) fn name(&self) -> &'static str {
         self.name
     }
-
-    /// エッジの数が正しいかどうか
-    pub(crate) fn is_edge_count_valid(&self, op: &Operator, wf_id: WorkflowId) -> bool {
-        match &self.kind {
-            NodeType::User(_) => true,
-            NodeType::If(_) => true,
-            NodeType::FirstChoice(_) => true,
-            NodeType::Recursive(node) => node.is_edge_count_valid(op, wf_id),
-        }
+}
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Node")
+            .field("inputs", &self.inputs)
+            .field("manage_cnt", &self.manage_cnt)
+            .field("outputs", &self.outputs)
+            .field("is_blocking", &self.is_blocking)
+            .field("choice", &self.choice)
+            .finish()
     }
 }
 impl std::cmp::PartialEq for Node {
@@ -140,17 +191,4 @@ impl std::hash::Hash for Node {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
-}
-
-/// ノードの種類
-#[derive(Debug)]
-pub(crate) enum NodeType {
-    /// ユーザー定義ノード
-    User(UserNode),
-    /// 分岐ノード
-    If(IfNode),
-    /// 最速ノード
-    FirstChoice(FirstChoiceNode),
-    /// 再帰ノード
-    Recursive(RecursiveNode),
 }

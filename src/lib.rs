@@ -85,13 +85,14 @@
 #![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
 pub mod container;
+pub mod edge;
 pub mod node;
 pub mod operator;
 pub mod processor;
 pub mod workflow;
 
-/*
-イテレーターについて
-イテレーターは、ノードでワークフローを実行することで実装する。
-つまり、ノード内から一つ一つのデータを処理するワークフローを実行することで、イテレーターのマップ処理を実現する。
-*/
+pub use crate::node::NodeBuilder;
+pub use crate::processor::ProcessorBuilder;
+pub use fake::Fake;
+
+// TODO: 末尾最適化を実装する

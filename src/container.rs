@@ -4,14 +4,14 @@
 //! 中に入っているデータの型は、決まっておらず、任意の型を格納し、任意の型を取り出すことができる。
 //! ただし、取り出すデータの型は入れたデータの型と一致している必要がある。
 
-use crate::node::edge::Edge;
-use crate::node::{Node, NodeType};
+use crate::edge::Edge;
+use crate::node::{Choice, Node};
 use crate::operator::ExecutorId;
-use log::warn;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::{debug, warn};
 
 /// コンテナエラー
 #[derive(Debug, Error, PartialEq)]
@@ -95,16 +95,18 @@ impl Container {
     }
 
     /// データをとにかく取り出す
-    fn take_anyway(&mut self) {
+    pub(crate) fn take_anyway(&mut self) {
         let _ = self.data.take();
         let _ = self.ty.take();
     }
 }
 impl std::fmt::Debug for Container {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Container")
-            .field("data", &self.data)
-            .finish()
+        if self.has_data() {
+            write!(f, "Container {{ data: Some(Any {{ .. }}) }}")
+        } else {
+            write!(f, "Container {{ data: None }}")
+        }
     }
 }
 impl Drop for Container {
@@ -175,36 +177,22 @@ impl ContainerMap {
     ///
     /// 実行可能な場合は true、そうでない場合は false
     pub(crate) fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
-        match node.kind() {
-            NodeType::User(node) => {
-                let mut result = true;
-                for edge in node.inputs() {
-                    if !self.check_edge_exists(edge.clone(), exec_id) {
-                        result = false;
-                        break;
-                    }
-                }
-                result
-            }
-            NodeType::If(node) => {
-                let edge = node.input();
-                self.check_edge_exists(edge.clone(), exec_id)
-            }
-            NodeType::FirstChoice(node) => {
-                for edge in node.inputs() {
-                    if self.check_edge_exists(edge.clone(), exec_id) {
-                        return true;
-                    }
-                }
-                false
-            }
-            NodeType::Recursive(node) => {
+        match node.choice() {
+            Choice::All => {
                 for edge in node.inputs() {
                     if !self.check_edge_exists(edge.clone(), exec_id) {
                         return false;
                     }
                 }
                 true
+            }
+            Choice::Any => {
+                for edge in node.inputs() {
+                    if self.check_edge_exists(edge.clone(), exec_id) {
+                        return true;
+                    }
+                }
+                false
             }
         }
     }
@@ -259,7 +247,9 @@ impl ContainerMap {
     /// # Arguments
     ///
     /// * `exec_id` - 実行ID
+    #[tracing::instrument(skip(self))]
     pub(crate) fn finish_containers(&mut self, exec_id: ExecutorId) {
+        debug!("Finish containers with exec_id");
         if let Some(con_map) = self.0.get_mut(&exec_id) {
             for (_, container) in con_map.iter_mut() {
                 container.take_anyway();
@@ -285,7 +275,6 @@ impl Drop for ContainerMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::*;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -381,14 +370,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_container_map_check_node_executable_user() {
+    async fn test_container_map_check_node_executable_all() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
 
-        let node = Arc::new(UserNode::new_test(vec![edge0.clone(), edge1.clone()]).to_node("node"));
+        let node = Arc::new(Node::new_test(
+            vec![edge0.clone(), edge1.clone()],
+            vec![],
+            "node",
+            Choice::All,
+        ));
         assert!(!map.check_node_executable(&node, exec_id));
 
         map.add_new_container(edge1.clone(), exec_id, "42").unwrap();
@@ -396,33 +390,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_container_map_check_node_executable_if() {
-        let exec_id = ExecutorId::new();
-        let mut map = ContainerMap::default();
-        let edge = Arc::new(Edge::new::<bool>());
-
-        let node = Arc::new(IfNode::new(edge.clone()).unwrap().to_node("node"));
-        assert!(!map.check_node_executable(&node, exec_id));
-
-        map.add_new_container(edge.clone(), exec_id, true).unwrap();
-        assert!(map.check_node_executable(&node, exec_id));
-    }
-
-    #[tokio::test]
-    async fn test_container_map_check_node_executable_first_choice() {
+    async fn test_container_map_check_node_executable_any() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
         let edge0 = Arc::new(Edge::new::<i32>());
-        let edge1 = Arc::new(Edge::new::<i32>());
-
-        let node = Arc::new(
-            FirstChoiceNode::new(vec![edge0.clone(), edge1.clone()])
-                .unwrap()
-                .to_node("node"),
-        );
-        assert!(!map.check_node_executable(&node, exec_id));
-
+        let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
+
+        let node = Arc::new(Node::new_test(
+            vec![edge0.clone(), edge1.clone()],
+            vec![],
+            "node",
+            Choice::Any,
+        ));
         assert!(map.check_node_executable(&node, exec_id));
     }
 
