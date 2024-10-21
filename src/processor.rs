@@ -192,7 +192,9 @@ impl ProcessorBuilder {
                 }
                 for (key, (handle, exec_id, rx)) in handlers.iter() {
                     if rx.try_recv().is_ok() {
-                        debug!("Task is finished: {:?}", handle.await.unwrap());
+                        if let Ok(name) = handle.await {
+                            debug!("Task is finished: {:?}", name);
+                        }
                         finished.push(key);
                     }
                     let is_finished = op.is_finished(*exec_id).await;
