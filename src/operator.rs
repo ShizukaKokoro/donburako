@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{oneshot, Mutex, MutexGuard};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -18,9 +18,9 @@ pub enum OperatorError {
     #[error("Container error")]
     ContainerError(#[from] ContainerError),
 
-    /// ワークフローが開始されていない
-    #[error("Workflow is not started {0}")]
-    NotStarted(String),
+    /// 終了した実行IDに対してコンテナを追加しようとした
+    #[error("The executor ID({0:?}) has already finished(Cannot add a container)")]
+    NotRunning(ExecutorId),
 }
 
 /// 実行ID
@@ -251,6 +251,10 @@ impl Operator {
         exec_id: ExecutorId,
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
+        if self.is_finished(exec_id).await {
+            trace!("Adding container at finished executor is ignored");
+            return Err(OperatorError::NotRunning(exec_id));
+        }
         debug!("Add container: {:?}", container);
         let mut cons_lock = self.containers.lock().await;
         for (e, c) in edge.iter().zip(container) {
