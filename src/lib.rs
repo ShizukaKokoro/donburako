@@ -93,6 +93,6 @@ pub mod workflow;
 
 pub use crate::node::NodeBuilder;
 pub use crate::processor::ProcessorBuilder;
-pub use fake::Fake;
+pub use fake::{Fake, Faker};
 
 // TODO: 末尾最適化を実装する
