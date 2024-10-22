@@ -281,9 +281,9 @@ impl Operator {
         let (wf_id, mut ignore_cnt) = if let Some(state) = exec.get(&exec_id) {
             match state {
                 State::Running(wf_id, _, ignore_cnt) => (wf_id, *ignore_cnt),
-                State::Finished(wf_id) => (wf_id, 0),
+                State::Finished(_) => return Ok(()),
                 #[cfg(feature = "dev")]
-                State::WaitTimer(wf_id) => (wf_id, 0),
+                State::WaitTimer(_) => return Ok(()),
             }
         } else {
             return Ok(());
