@@ -572,8 +572,8 @@ mod test {
                     con_clone.store("test");
                     output_cons.push_back(con_clone);
                     op.add_container(self_.outputs(), exec_id, output_cons)
-                        .await
-                        .unwrap();
+                        .await?;
+                    Ok(())
                 })
             }),
             false,
@@ -593,7 +593,7 @@ mod test {
             .get_container(&[edge_to.clone()], exec_id)
             .await
             .is_empty());
-        f.await;
+        assert!(f.await.is_ok());
         wf_rx.await.unwrap();
         assert_eq!(op.get_container(&[edge_to], exec_id).await.len(), 1);
         let is_finished = op.is_finished(exec_id).await;

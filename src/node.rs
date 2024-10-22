@@ -15,7 +15,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 /// ノードエラー
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum NodeError {
     /// すでに出力エッジが存在する
     #[error("Output edge already exists")]
@@ -24,6 +24,14 @@ pub enum NodeError {
     /// エッジの型が一致しない
     #[error("First choice node must have the same type in the input edges")]
     EdgeTypeMismatch,
+
+    /// 実行中のオペレーターエラー
+    #[error("Error while running the node ({0})")]
+    RunningError(#[from] crate::operator::OperatorError),
+
+    /// 実行中の任意のエラー
+    #[error("Error while running the node ({0})")]
+    AnyError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
 /// ノードID
@@ -46,7 +54,7 @@ pub enum Choice {
     Any,
 }
 
-type BoxedFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+type BoxedFuture<'a> = Pin<Box<dyn Future<Output = Result<(), NodeError>> + Send + 'a>>;
 
 type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Operator, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
 
@@ -130,7 +138,7 @@ impl Node {
             inputs,
             0,
             outputs,
-            Box::new(|_, _, _| Box::pin(async {})),
+            Box::new(|_, _, _| Box::pin(async { Ok(()) })),
             false,
             name,
             choice,
@@ -157,8 +165,8 @@ impl Node {
         self.is_blocking
     }
 
-    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) {
-        (self.func)(self, op, exec_id).await;
+    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) -> Result<(), NodeError> {
+        (self.func)(self, op, exec_id).await
     }
     /// エッジの判断方法の取得
     pub(crate) fn choice(&self) -> &Choice {

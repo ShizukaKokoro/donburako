@@ -3,6 +3,7 @@
 //! ワークフローを保持し、コンテナを移動させる。
 
 use crate::edge::Edge;
+use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
 use std::collections::VecDeque;
@@ -12,10 +13,10 @@ use tokio::runtime::Handle;
 use tokio::sync::oneshot;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, trace};
+use tracing::{debug, info, trace, warn};
 
 /// プロセッサーエラー
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum ProcessorError {
     /// コンテナエラー
     #[error("Container error")]
@@ -24,6 +25,10 @@ pub enum ProcessorError {
     /// オペレーターエラー
     #[error("Operator error")]
     OperatorError(#[from] crate::operator::OperatorError),
+
+    /// Join エラー
+    #[error("Join error")]
+    JoinError(#[from] tokio::task::JoinError),
 
     /// エッジの数が不正
     #[error("Some node has invalid edge count")]
@@ -110,7 +115,7 @@ impl ProcessorBuilder {
     /// ビルド
     pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
-        let mut handlers = Handlers::new(n);
+        let mut handlers: Handlers<Result<&str, NodeError>> = Handlers::new(n);
         let op = Operator::new(self.workflow);
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
@@ -133,56 +138,56 @@ impl ProcessorBuilder {
                     trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
-                    let (handle, exec_id, node_rx) =
-                        if let Some((node, exec_id)) = op.get_next_node().await {
-                            #[cfg(feature = "dev")]
-                            op.start_timer(exec_id).await;
-                            let op_clone = op.clone();
-                            debug!("Task is started: {:?}", node.name());
-                            let (node_tx, node_rx) = oneshot::channel();
-                            if node.is_blocking() {
-                                let rt_handle = Handle::current();
+                    let (handle, exec_id, node_rx) = if let Some((node, exec_id)) =
+                        op.get_next_node().await
+                    {
+                        #[cfg(feature = "dev")]
+                        op.start_timer(exec_id).await;
+                        let op_clone = op.clone();
+                        debug!("Task is started: {:?}", node.name());
+                        let (node_tx, node_rx) = oneshot::channel();
+                        if node.is_blocking() {
+                            let rt_handle = Handle::current();
+                            (
+                                spawn_blocking(move || {
+                                    rt_handle
+                                        .block_on(async { node.run(&op_clone, exec_id).await })?;
+                                    node_tx.send(()).unwrap();
+                                    Ok(node.name())
+                                }),
+                                exec_id,
+                                node_rx,
+                            )
+                        } else {
+                            #[cfg(not(feature = "dev"))]
+                            {
                                 (
-                                    spawn_blocking(move || {
-                                        rt_handle.block_on(async {
-                                            node.run(&op_clone, exec_id).await;
-                                        });
+                                    spawn(async move {
+                                        node.run(&op_clone, exec_id).await?;
                                         node_tx.send(()).unwrap();
-                                        node.name()
+                                        Ok(node.name())
                                     }),
                                     exec_id,
                                     node_rx,
                                 )
-                            } else {
-                                #[cfg(not(feature = "dev"))]
-                                {
-                                    (
-                                        spawn(async move {
-                                            node.run(&op_clone, exec_id).await;
-                                            node_tx.send(()).unwrap();
-                                            node.name()
-                                        }),
-                                        exec_id,
-                                        node_rx,
-                                    )
-                                }
-                                #[cfg(feature = "dev")]
-                                (
-                                    tokio::task::Builder::new()
-                                        .name(node.name())
-                                        .spawn(async move {
-                                            node.run(&op_clone, exec_id).await;
-                                            node_tx.send(()).unwrap();
-                                            node.name()
-                                        })
-                                        .unwrap(),
-                                    exec_id,
-                                    node_rx,
-                                )
                             }
-                        } else {
-                            break;
-                        };
+                            #[cfg(feature = "dev")]
+                            (
+                                tokio::task::Builder::new()
+                                    .name(node.name())
+                                    .spawn(async move {
+                                        node.run(&op_clone, exec_id).await?;
+                                        node_tx.send(()).unwrap();
+                                        Ok(node.name())
+                                    })
+                                    .unwrap(),
+                                exec_id,
+                                node_rx,
+                            )
+                        }
+                    } else {
+                        break;
+                    };
                     handlers.push(handle, exec_id, node_rx);
                 }
 
@@ -192,8 +197,14 @@ impl ProcessorBuilder {
                 }
                 for (key, (handle, exec_id, node_rx)) in handlers.iter() {
                     if node_rx.try_recv().is_ok() {
-                        if let Ok(name) = handle.await {
-                            debug!("Task is finished: {:?}", name);
+                        let result = handle.await?;
+                        match result {
+                            Ok(name) => {
+                                debug!("Task is finished: {:?}", name);
+                            }
+                            Err(e) => {
+                                warn!("Task is failed: {:?}", e);
+                            }
                         }
                         finished.push(key);
                     }
@@ -210,6 +221,7 @@ impl ProcessorBuilder {
                     handlers.remove(key);
                 }
             }
+            Ok(())
         });
 
         Processor {
@@ -224,7 +236,7 @@ impl ProcessorBuilder {
 /// プロセッサー
 pub struct Processor {
     op: Operator,
-    handle: JoinHandle<()>,
+    handle: JoinHandle<Result<(), ProcessorError>>,
     cancel: CancellationToken,
     shutdown_token: CancellationToken,
 }
@@ -291,9 +303,9 @@ impl Processor {
     }
 
     /// プロセッサーの待機
-    pub async fn wait(self) {
+    pub async fn wait(self) -> Result<(), ProcessorError> {
         info!("Wait processor");
-        self.handle.await.unwrap();
+        self.handle.await.unwrap()
     }
 }
 
