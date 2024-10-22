@@ -152,7 +152,7 @@ impl ProcessorBuilder {
                                 spawn_blocking(move || {
                                     rt_handle
                                         .block_on(async { node.run(&op_clone, exec_id).await })?;
-                                    node_tx.send(()).unwrap();
+                                    let _ = node_tx.send(());
                                     Ok(node.name())
                                 }),
                                 exec_id,
@@ -164,7 +164,7 @@ impl ProcessorBuilder {
                                 (
                                     spawn(async move {
                                         node.run(&op_clone, exec_id).await?;
-                                        node_tx.send(()).unwrap();
+                                        let _ = node_tx.send(());
                                         Ok(node.name())
                                     }),
                                     exec_id,
@@ -177,7 +177,7 @@ impl ProcessorBuilder {
                                     .name(node.name())
                                     .spawn(async move {
                                         node.run(&op_clone, exec_id).await?;
-                                        node_tx.send(()).unwrap();
+                                        let _ = node_tx.send(());
                                         Ok(node.name())
                                     })
                                     .unwrap(),
@@ -196,7 +196,9 @@ impl ProcessorBuilder {
                     trace!("Check running tasks");
                 }
                 for (key, (handle, exec_id, node_rx)) in handlers.iter() {
-                    if node_rx.try_recv().is_ok() {
+                    if op.is_finished(*exec_id).await {
+                        finished.push(key);
+                    } else if node_rx.try_recv().is_ok() {
                         let result = handle.await?;
                         match result {
                             Ok(name) => {

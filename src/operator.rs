@@ -163,6 +163,7 @@ impl Operator {
         wf_id: WorkflowId,
     ) -> oneshot::Receiver<()> {
         info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        self.containers.lock().await.entry_by_exec_id(exec_id);
         let (wf_tx, wf_rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self

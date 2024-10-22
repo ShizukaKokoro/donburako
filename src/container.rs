@@ -110,6 +110,7 @@ impl std::fmt::Debug for Container {
     }
 }
 impl Drop for Container {
+    #[tracing::instrument]
     fn drop(&mut self) {
         #[cfg(not(test))]
         if self.has_data() {
@@ -127,6 +128,13 @@ impl Drop for Container {
 #[derive(Default, Debug)]
 pub(crate) struct ContainerMap(HashMap<ExecutorId, HashMap<Arc<Edge>, Container>>);
 impl ContainerMap {
+    /// 新しいコンテナマップを確保する
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn entry_by_exec_id(&mut self, exec_id: ExecutorId) {
+        debug!("Entry by exec_id");
+        let _ = self.0.entry(exec_id).or_default();
+    }
+
     /// 新しいコンテナの追加
     ///
     /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
@@ -213,11 +221,7 @@ impl ContainerMap {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Option<Container> {
-        let con = self.0.get_mut(&exec_id)?.remove(&edge);
-        if self.0.get(&exec_id)?.is_empty() {
-            let _ = self.0.remove(&exec_id);
-        }
-        con
+        self.0.get_mut(&exec_id)?.remove(&edge)
     }
 
     /// 既存のコンテナの追加
@@ -229,17 +233,22 @@ impl ContainerMap {
     /// * `edge` - エッジ
     /// * `exec_id` - 実行ID
     /// * `container` - コンテナ
+    #[tracing::instrument(skip(self))]
     pub(crate) fn add_container(
         &mut self,
         edge: Arc<Edge>,
         exec_id: ExecutorId,
-        container: Container,
+        mut container: Container,
     ) -> Result<(), ContainerError> {
         if !container.has_data() {
             return Err(ContainerError::DataNotFound);
         }
-        let _ = self.0.entry(exec_id).or_default();
-        let _ = self.0.get_mut(&exec_id).unwrap().insert(edge, container);
+        if let Some(map) = self.0.get_mut(&exec_id) {
+            let _ = map.insert(edge, container);
+        } else {
+            debug!("Container is dropped safely");
+            container.take_anyway();
+        }
         Ok(())
     }
 
