@@ -113,6 +113,7 @@ impl Drop for Container {
     fn drop(&mut self) {
         #[cfg(not(test))]
         if self.has_data() {
+            tracing::error!("Drop Container");
             unreachable!("Container is dropped with data (type: {:?})", self.ty);
         }
     }

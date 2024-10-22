@@ -253,6 +253,9 @@ impl Operator {
     ) -> Result<(), OperatorError> {
         if self.is_finished(exec_id).await {
             trace!("Adding container at finished executor is ignored");
+            for mut c in container {
+                c.take_anyway();
+            }
             return Err(OperatorError::NotRunning(exec_id));
         }
         debug!("Add container: {:?}", container);
