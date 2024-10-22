@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{oneshot, Mutex, MutexGuard};
-use tracing::{debug, info, trace};
+use tracing::{debug, info, trace, warn};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -220,16 +220,22 @@ impl Operator {
         &self,
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
-    ) -> VecDeque<Container> {
+    ) -> Result<VecDeque<Container>, OperatorError> {
+        let mut cons_lock = self.containers.lock().await;
+        if !cons_lock.is_running(exec_id) {
+            return Err(OperatorError::NotRunning(exec_id));
+        }
         debug!("Get container");
         let mut containers = VecDeque::new();
-        let mut cons_lock = self.containers.lock().await;
         for e in edge {
             if let Some(container) = cons_lock.get_container(e.clone(), exec_id) {
                 containers.push_back(container);
             }
         }
-        containers
+        if containers.is_empty() {
+            warn!("Container is empty");
+        }
+        Ok(containers)
     }
 
     /// 既存のコンテナの追加
@@ -571,7 +577,7 @@ mod test {
             vec![edge_to.clone()],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
-                    let mut cons = op.get_container(self_.inputs(), exec_id).await;
+                    let mut cons = op.get_container(self_.inputs(), exec_id).await?;
                     let mut con = cons.pop_front().unwrap();
                     let _: &str = con.take().unwrap();
                     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
@@ -600,10 +606,14 @@ mod test {
         assert!(op
             .get_container(&[edge_to.clone()], exec_id)
             .await
+            .unwrap()
             .is_empty());
         assert!(f.await.is_ok());
         wf_rx.await.unwrap();
-        assert_eq!(op.get_container(&[edge_to], exec_id).await.len(), 1);
+        assert_eq!(
+            op.get_container(&[edge_to], exec_id).await.unwrap().len(),
+            1
+        );
         let is_finished = op.is_finished(exec_id).await;
         assert!(is_finished);
     }

@@ -135,6 +135,12 @@ impl ContainerMap {
         let _ = self.0.entry(exec_id).or_default();
     }
 
+    /// コンテナマップがあるかどうか
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn is_running(&self, exec_id: ExecutorId) -> bool {
+        self.0.contains_key(&exec_id)
+    }
+
     /// 新しいコンテナの追加
     ///
     /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
