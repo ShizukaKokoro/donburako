@@ -5,19 +5,19 @@ edition = "2021"
 authors = ["ShizukaKokoro"]
 
 [dependencies]
-uuid.workspace = true
-tokio = { workspace = true }
-tokio-util.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-fake.workspace = true
+uuid = "1"
+tokio = "1"
+tokio-util = "0"
+thiserror = "1"
+tracing = "0"
+fake = "2"
 
 
-console-subscriber = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true }
+console-subscriber = { version = "0", optional = true }
+tracing-subscriber = { version = "0", optional = true }
 
 [dev-dependencies]
-pretty_assertions.workspace = true
+pretty_assertions = "1"
 
 [features]
 default = []
