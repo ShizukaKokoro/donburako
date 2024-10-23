@@ -12,6 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 /// ノードエラー
@@ -56,7 +57,8 @@ pub enum Choice {
 
 type BoxedFuture<'a> = Pin<Box<dyn Future<Output = Result<(), NodeError>> + Send + 'a>>;
 
-type AsyncFn = dyn for<'a> Fn(&'a Node, &'a Operator, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
+type AsyncFn =
+    dyn for<'a> Fn(&'a Node, Arc<Mutex<Operator>>, ExecutorId) -> BoxedFuture<'a> + Send + Sync;
 
 /// ノードビルダートレイト
 pub trait NodeBuilder {
@@ -165,7 +167,11 @@ impl Node {
         self.is_blocking
     }
 
-    pub(super) async fn run(&self, op: &Operator, exec_id: ExecutorId) -> Result<(), NodeError> {
+    pub(super) async fn run(
+        &self,
+        op: Arc<Mutex<Operator>>,
+        exec_id: ExecutorId,
+    ) -> Result<(), NodeError> {
         (self.func)(self, op, exec_id).await
     }
     /// エッジの判断方法の取得

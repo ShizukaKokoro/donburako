@@ -146,9 +146,9 @@ impl Operator {
     ///
     /// 0: 始点のエッジ
     /// 1: 終点のエッジ
-    pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (&Vec<Arc<Edge>>, &Vec<Arc<Edge>>) {
+    pub fn get_start_end_edges(&self, wf_id: &WorkflowId) -> (Vec<Arc<Edge>>, Vec<Arc<Edge>>) {
         let wf = &self.workflows[wf_id];
-        (wf.start_edges(), wf.end_edges())
+        (wf.start_edges().clone(), wf.end_edges().clone())
     }
 
     /// ワークフローの実行開始
@@ -577,7 +577,11 @@ mod test {
             vec![edge_to.clone()],
             Box::new(|self_, op, exec_id| {
                 Box::pin(async move {
-                    let mut cons = op.get_container(self_.inputs(), exec_id).await?;
+                    let mut cons = op
+                        .lock()
+                        .await
+                        .get_container(self_.inputs(), exec_id)
+                        .await?;
                     let mut con = cons.pop_front().unwrap();
                     let _: &str = con.take().unwrap();
                     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
@@ -585,7 +589,9 @@ mod test {
                     let mut con_clone = con.clone_container().unwrap();
                     con_clone.store("test");
                     output_cons.push_back(con_clone);
-                    op.add_container(self_.outputs(), exec_id, output_cons)
+                    op.lock()
+                        .await
+                        .add_container(self_.outputs(), exec_id, output_cons)
                         .await?;
                     Ok(())
                 })
@@ -595,15 +601,21 @@ mod test {
             Choice::All,
         );
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
-        let op = Operator::new(vec![(wf_id, builder)]);
+        let op = Arc::new(Mutex::new(Operator::new(vec![(wf_id, builder)])));
         let exec_id = ExecutorId::default();
-        let wf_rx = op.start_workflow(exec_id, wf_id).await;
-        op.add_new_container(edge, exec_id, "test").await.unwrap();
-        let node = op.get_next_node().await.unwrap().0;
-        let f = node.run(&op, exec_id);
-        let is_finished = op.is_finished(exec_id).await;
+        let wf_rx = op.lock().await.start_workflow(exec_id, wf_id).await;
+        op.lock()
+            .await
+            .add_new_container(edge, exec_id, "test")
+            .await
+            .unwrap();
+        let node = op.lock().await.get_next_node().await.unwrap().0;
+        let f = node.run(op.clone(), exec_id);
+        let is_finished = op.lock().await.is_finished(exec_id).await;
         assert!(!is_finished);
         assert!(op
+            .lock()
+            .await
             .get_container(&[edge_to.clone()], exec_id)
             .await
             .unwrap()
@@ -611,10 +623,15 @@ mod test {
         assert!(f.await.is_ok());
         wf_rx.await.unwrap();
         assert_eq!(
-            op.get_container(&[edge_to], exec_id).await.unwrap().len(),
+            op.lock()
+                .await
+                .get_container(&[edge_to], exec_id)
+                .await
+                .unwrap()
+                .len(),
             1
         );
-        let is_finished = op.is_finished(exec_id).await;
+        let is_finished = op.lock().await.is_finished(exec_id).await;
         assert!(is_finished);
     }
 }

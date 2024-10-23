@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Handle;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex};
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
@@ -116,7 +116,7 @@ impl ProcessorBuilder {
     pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
         let mut handlers: Handlers<Result<&str, NodeError>> = Handlers::new(n);
-        let op = Operator::new(self.workflow);
+        let op = Arc::new(Mutex::new(Operator::new(self.workflow)));
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
@@ -130,19 +130,20 @@ impl ProcessorBuilder {
                 if cancel_clone.is_cancelled() || !flag {
                     break;
                 }
-                if shutdown_clone.is_cancelled() && op.check_all_finished().await {
+                if shutdown_clone.is_cancelled() && op.lock().await.check_all_finished().await {
                     flag = false;
                 }
 
-                if op.has_executable_node().await {
+                let op_lock = op.lock().await;
+                if op_lock.has_executable_node().await {
                     trace!("Get nodes enabled to run");
                 }
                 while !handlers.is_full() {
                     let (handle, exec_id, node_rx) = if let Some((node, exec_id)) =
-                        op.get_next_node().await
+                        op_lock.get_next_node().await
                     {
                         #[cfg(feature = "dev")]
-                        op.start_timer(exec_id).await;
+                        op_lock.start_timer(exec_id).await;
                         let op_clone = op.clone();
                         debug!("Task is started: {:?}", node.name());
                         let (node_tx, node_rx) = oneshot::channel();
@@ -151,7 +152,7 @@ impl ProcessorBuilder {
                             (
                                 spawn_blocking(move || {
                                     rt_handle
-                                        .block_on(async { node.run(&op_clone, exec_id).await })?;
+                                        .block_on(async { node.run(op_clone, exec_id).await })?;
                                     let _ = node_tx.send(());
                                     Ok(node.name())
                                 }),
@@ -176,7 +177,7 @@ impl ProcessorBuilder {
                                 tokio::task::Builder::new()
                                     .name(node.name())
                                     .spawn(async move {
-                                        node.run(&op_clone, exec_id).await?;
+                                        node.run(op_clone, exec_id).await?;
                                         let _ = node_tx.send(());
                                         Ok(node.name())
                                     })
@@ -190,13 +191,15 @@ impl ProcessorBuilder {
                     };
                     handlers.push(handle, exec_id, node_rx);
                 }
+                drop(op_lock);
 
                 let mut finished = Vec::new();
                 if handlers.is_running() {
                     trace!("Check running tasks");
                 }
+                let op_lock = op.lock().await;
                 for (key, (handle, exec_id, node_rx)) in handlers.iter() {
-                    if op.is_finished(*exec_id).await {
+                    if op_lock.is_finished(*exec_id).await {
                         finished.push(key);
                     } else if node_rx.try_recv().is_ok() {
                         let result = handle.await?;
@@ -210,15 +213,16 @@ impl ProcessorBuilder {
                         }
                         finished.push(key);
                     }
-                    let is_finished = op.is_finished(*exec_id).await;
+                    let is_finished = op_lock.is_finished(*exec_id).await;
                     if is_finished {
                         #[cfg(feature = "dev")]
-                        op.stop_timer(*exec_id).await;
-                        if op.check_all_containers_taken(*exec_id).await {
-                            op.finish_workflow_by_execute_id(*exec_id).await;
+                        op_lock.stop_timer(*exec_id).await;
+                        if op_lock.check_all_containers_taken(*exec_id).await {
+                            op_lock.finish_workflow_by_execute_id(*exec_id).await;
                         }
                     }
                 }
+                drop(op_lock);
                 for key in finished {
                     handlers.remove(key);
                 }
@@ -237,7 +241,7 @@ impl ProcessorBuilder {
 
 /// プロセッサー
 pub struct Processor {
-    op: Operator,
+    op: Arc<Mutex<Operator>>,
     handle: JoinHandle<Result<(), ProcessorError>>,
     cancel: CancellationToken,
     shutdown_token: CancellationToken,
@@ -250,7 +254,7 @@ impl Processor {
     /// * `wf_id` - ワークフローID
     pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
         let id = ExecutorId::new();
-        let wf_rx = self.op.start_workflow(id, wf_id).await;
+        let wf_rx = self.op.lock().await.start_workflow(id, wf_id).await;
         (id, wf_rx)
     }
 
@@ -267,7 +271,11 @@ impl Processor {
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), ProcessorError> {
-        self.op.add_new_container(edge, exec_id, data).await?;
+        self.op
+            .lock()
+            .await
+            .add_new_container(edge, exec_id, data)
+            .await?;
         Ok(())
     }
 
@@ -282,7 +290,7 @@ impl Processor {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Result<T, ProcessorError> {
-        let mut cons = self.op.get_container(&[edge], exec_id).await?;
+        let mut cons = self.op.lock().await.get_container(&[edge], exec_id).await?;
         if cons.len() == 1 {
             let mut con = cons.pop_front().unwrap();
             assert_eq!(cons.len(), 0);
