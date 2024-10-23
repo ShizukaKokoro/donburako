@@ -251,6 +251,7 @@ impl Processor {
     /// * `wf_id` - ワークフローID
     pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
         let id = ExecutorId::new();
+        info!("Start workflow: {:?}({:?})", wf_id, id);
         let wf_rx = self.op.lock().await.start_workflow(id, wf_id).await;
         (id, wf_rx)
     }

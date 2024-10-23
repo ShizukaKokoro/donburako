@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::oneshot;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -161,7 +161,8 @@ impl Operator {
         exec_id: ExecutorId,
         wf_id: WorkflowId,
     ) -> oneshot::Receiver<()> {
-        info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        #[cfg(feature = "dev")]
+        tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
         self.containers.entry_by_exec_id(exec_id);
         let (wf_tx, wf_rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
