@@ -197,10 +197,16 @@ impl ProcessorBuilder {
                 if handlers.is_running() {
                     trace!("Check running tasks");
                 }
-                let mut op_lock = op.lock().await;
                 for (key, (handle, exec_id, node_rx)) in handlers.iter() {
-                    if op_lock.is_finished(*exec_id).await {
+                    if op.lock().await.is_finished(*exec_id).await {
                         finished.push(key);
+                        let mut op_lock = op.lock().await;
+                        #[cfg(feature = "dev")]
+                        op_lock.stop_timer(*exec_id).await;
+                        if op_lock.check_all_containers_taken(*exec_id).await {
+                            op_lock.finish_workflow_by_execute_id(*exec_id).await;
+                        }
+                        drop(op_lock);
                     } else if node_rx.try_recv().is_ok() {
                         let result = handle.await?;
                         match result {
@@ -213,16 +219,7 @@ impl ProcessorBuilder {
                         }
                         finished.push(key);
                     }
-                    let is_finished = op_lock.is_finished(*exec_id).await;
-                    if is_finished {
-                        #[cfg(feature = "dev")]
-                        op_lock.stop_timer(*exec_id).await;
-                        if op_lock.check_all_containers_taken(*exec_id).await {
-                            op_lock.finish_workflow_by_execute_id(*exec_id).await;
-                        }
-                    }
                 }
-                drop(op_lock);
                 for key in finished {
                     handlers.remove(key);
                 }
