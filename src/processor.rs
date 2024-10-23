@@ -134,7 +134,7 @@ impl ProcessorBuilder {
                     flag = false;
                 }
 
-                let op_lock = op.lock().await;
+                let mut op_lock = op.lock().await;
                 if op_lock.has_executable_node().await {
                     trace!("Get nodes enabled to run");
                 }
@@ -164,7 +164,7 @@ impl ProcessorBuilder {
                             {
                                 (
                                     spawn(async move {
-                                        node.run(&op_clone, exec_id).await?;
+                                        node.run(op_clone, exec_id).await?;
                                         let _ = node_tx.send(());
                                         Ok(node.name())
                                     }),
@@ -197,7 +197,7 @@ impl ProcessorBuilder {
                 if handlers.is_running() {
                     trace!("Check running tasks");
                 }
-                let op_lock = op.lock().await;
+                let mut op_lock = op.lock().await;
                 for (key, (handle, exec_id, node_rx)) in handlers.iter() {
                     if op_lock.is_finished(*exec_id).await {
                         finished.push(key);

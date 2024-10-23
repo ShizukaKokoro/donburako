@@ -7,7 +7,7 @@ use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{oneshot, Mutex, MutexGuard};
+use tokio::sync::oneshot;
 use tracing::{debug, info, trace, warn};
 use uuid::Uuid;
 
@@ -84,14 +84,14 @@ enum State {
 /// オペレーター
 ///
 /// コンテナと実行IDごとのワークフローの状態を管理する。
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Operator {
-    workflows: Arc<HashMap<WorkflowId, Workflow>>,
-    containers: Arc<Mutex<ContainerMap>>,
-    executors: Arc<Mutex<HashMap<ExecutorId, State>>>,
-    queue: Arc<Mutex<ExecutableQueue>>,
+    workflows: HashMap<WorkflowId, Workflow>,
+    containers: ContainerMap,
+    executors: HashMap<ExecutorId, State>,
+    queue: ExecutableQueue,
     #[cfg(feature = "dev")]
-    time: Arc<Mutex<HashMap<(WorkflowId, ExecutorId), std::time::Instant>>>,
+    time: HashMap<(WorkflowId, ExecutorId), std::time::Instant>,
 }
 impl Operator {
     /// 新しいオペレーターの生成
@@ -105,12 +105,12 @@ impl Operator {
             let _ = workflows.insert(id, builder.build());
         }
         Self {
-            workflows: Arc::new(workflows),
-            containers: Arc::new(Mutex::new(ContainerMap::default())),
-            executors: Arc::new(Mutex::new(HashMap::new())),
-            queue: Arc::new(Mutex::new(ExecutableQueue::default())),
+            workflows,
+            containers: ContainerMap::default(),
+            executors: HashMap::new(),
+            queue: ExecutableQueue::default(),
             #[cfg(feature = "dev")]
-            time: Arc::new(Mutex::new(HashMap::new())),
+            time: HashMap::new(),
         }
     }
 
@@ -126,8 +126,7 @@ impl Operator {
     ///
     /// ワークフローID
     pub(crate) async fn get_wf_id(&self, exec_id: ExecutorId) -> Option<WorkflowId> {
-        let exec = self.executors.lock().await;
-        match exec.get(&exec_id) {
+        match self.executors.get(&exec_id) {
             Some(State::Running(wf_id, _, _)) => Some(*wf_id),
             Some(State::Finished(wf_id)) => Some(*wf_id),
             #[cfg(feature = "dev")]
@@ -158,22 +157,19 @@ impl Operator {
     /// * `exec_id` - 実行ID
     /// * `wf_id` - ワークフローID
     pub async fn start_workflow(
-        &self,
+        &mut self,
         exec_id: ExecutorId,
         wf_id: WorkflowId,
     ) -> oneshot::Receiver<()> {
         info!("Start workflow: {:?}({:?})", wf_id, exec_id);
-        self.containers.lock().await.entry_by_exec_id(exec_id);
+        self.containers.entry_by_exec_id(exec_id);
         let (wf_tx, wf_rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self
             .executors
-            .lock()
-            .await
             .insert(exec_id, State::Running(wf_id, wf_tx, ignore_cnt));
-        let mut queue_lock = self.queue.lock().await;
         for node in self.workflows[&wf_id].start_nodes() {
-            queue_lock.push(node.clone(), exec_id);
+            self.queue.push(node.clone(), exec_id);
         }
         wf_rx
     }
@@ -193,16 +189,15 @@ impl Operator {
     /// 成功した場合は Ok(())
     #[tracing::instrument(skip(self, data))]
     pub(crate) async fn add_new_container<T: 'static + Send + Sync>(
-        &self,
+        &mut self,
         edge: Arc<Edge>,
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), OperatorError> {
         debug!("Add new container");
-        let mut cons_lock = self.containers.lock().await;
-        cons_lock.add_new_container(edge.clone(), exec_id, data)?;
-        self.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
-            .await
+        self.containers
+            .add_new_container(edge.clone(), exec_id, data)?;
+        self.enqueue_node_if_executable(&[edge], exec_id).await
     }
 
     /// コンテナの取得
@@ -217,18 +212,17 @@ impl Operator {
     /// コンテナ
     #[tracing::instrument(skip(self))]
     pub async fn get_container(
-        &self,
+        &mut self,
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
     ) -> Result<VecDeque<Container>, OperatorError> {
-        let mut cons_lock = self.containers.lock().await;
-        if !cons_lock.is_running(exec_id) {
+        if !self.containers.is_running(exec_id) {
             return Err(OperatorError::NotRunning(exec_id));
         }
         debug!("Get container");
         let mut containers = VecDeque::new();
         for e in edge {
-            if let Some(container) = cons_lock.get_container(e.clone(), exec_id) {
+            if let Some(container) = self.containers.get_container(e.clone(), exec_id) {
                 containers.push_back(container);
             }
         }
@@ -253,7 +247,7 @@ impl Operator {
     /// 成功した場合は Ok(())
     #[tracing::instrument(skip(self, container))]
     pub async fn add_container(
-        &self,
+        &mut self,
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
         container: VecDeque<Container>,
@@ -266,12 +260,10 @@ impl Operator {
             return Err(OperatorError::NotRunning(exec_id));
         }
         debug!("Add container: {:?}", container);
-        let mut cons_lock = self.containers.lock().await;
         for (e, c) in edge.iter().zip(container) {
-            cons_lock.add_container(e.clone(), exec_id, c)?;
+            self.containers.add_container(e.clone(), exec_id, c)?;
         }
-        self.enqueue_node_if_executable(edge, exec_id, &mut cons_lock)
-            .await
+        self.enqueue_node_if_executable(edge, exec_id).await
     }
 
     /// エッジからノードの実行可能性を確認し、実行可能な場合はキューに追加する
@@ -286,13 +278,11 @@ impl Operator {
     /// 成功した場合は Ok(())
     #[tracing::instrument(skip(self))]
     async fn enqueue_node_if_executable(
-        &self,
+        &mut self,
         edge: &[Arc<Edge>],
         exec_id: ExecutorId,
-        cons_lock: &mut MutexGuard<'_, ContainerMap>,
     ) -> Result<(), OperatorError> {
-        let mut exec = self.executors.lock().await;
-        let (wf_id, mut ignore_cnt) = if let Some(state) = exec.get(&exec_id) {
+        let (wf_id, mut ignore_cnt) = if let Some(state) = self.executors.get(&exec_id) {
             match state {
                 State::Running(wf_id, _, ignore_cnt) => (wf_id, *ignore_cnt),
                 State::Finished(_) => return Ok(()),
@@ -303,15 +293,14 @@ impl Operator {
             return Ok(());
         };
         let mut finish = false;
-        let mut queue_lock = self.queue.lock().await;
         for e in edge {
             if let Some(node) = self.workflows[wf_id].get_node(e) {
-                if cons_lock.check_node_executable(&node, exec_id) {
-                    queue_lock.push(node, exec_id);
+                if self.containers.check_node_executable(&node, exec_id) {
+                    self.queue.push(node, exec_id);
                 }
             } else if self.workflows[wf_id].ignore_edges().contains(e) {
                 ignore_cnt -= 1;
-                if let Some(mut con) = cons_lock.get_container(e.clone(), exec_id) {
+                if let Some(mut con) = self.containers.get_container(e.clone(), exec_id) {
                     con.take_anyway();
                 }
                 if ignore_cnt == 0 {
@@ -322,7 +311,7 @@ impl Operator {
             }
         }
         if finish {
-            self.check_finish(exec_id, &mut exec, cons_lock);
+            self.check_finish(exec_id);
         }
         Ok(())
     }
@@ -333,7 +322,7 @@ impl Operator {
     ///
     /// 実行可能なノードが存在する場合は true、存在しない場合は false
     pub(crate) async fn has_executable_node(&self) -> bool {
-        !self.queue.lock().await.queue.is_empty()
+        !self.queue.queue.is_empty()
     }
 
     /// 次に実行するノードを取得する
@@ -343,10 +332,9 @@ impl Operator {
     /// # Returns
     ///
     /// 実行可能なノードと実行ID
-    pub(crate) async fn get_next_node(&self) -> Option<(Arc<Node>, ExecutorId)> {
-        let cons_lock = self.containers.lock().await;
-        while let Some((node, exec_id)) = self.queue.lock().await.pop() {
-            if cons_lock.check_node_executable(&node, exec_id) {
+    pub(crate) async fn get_next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
+        while let Some((node, exec_id)) = self.queue.pop() {
+            if self.containers.check_node_executable(&node, exec_id) {
                 return Some((node, exec_id));
             }
         }
@@ -354,19 +342,17 @@ impl Operator {
     }
 
     #[tracing::instrument(skip(self))]
-    fn check_finish(
-        &self,
-        exec_id: ExecutorId,
-        exec: &mut MutexGuard<'_, HashMap<ExecutorId, State>>,
-        cons_lock: &mut MutexGuard<'_, ContainerMap>,
-    ) {
-        let wf_id = if let Some(State::Running(wf_id, wf_tx, ignore_cnt)) = exec.remove(&exec_id) {
+    fn check_finish(&mut self, exec_id: ExecutorId) {
+        let wf_id = if let Some(State::Running(wf_id, wf_tx, ignore_cnt)) =
+            self.executors.remove(&exec_id)
+        {
             for end in self.workflows[&wf_id].end_edges() {
                 if self.workflows[&wf_id].ignore_edges().contains(end) {
                     continue;
                 }
-                if !cons_lock.check_edge_exists(end.clone(), exec_id) {
-                    assert!(exec
+                if !self.containers.check_edge_exists(end.clone(), exec_id) {
+                    assert!(self
+                        .executors
                         .insert(exec_id, State::Running(wf_id, wf_tx, ignore_cnt))
                         .is_none());
                     return;
@@ -377,7 +363,7 @@ impl Operator {
         } else {
             return;
         };
-        let _ = exec.insert(exec_id, State::Finished(wf_id));
+        let _ = self.executors.insert(exec_id, State::Finished(wf_id));
     }
 
     /// ワークフローの終了確認
@@ -392,8 +378,6 @@ impl Operator {
     #[tracing::instrument(skip(self))]
     pub(crate) async fn is_finished(&self, exec_id: ExecutorId) -> bool {
         self.executors
-            .lock()
-            .await
             .get(&exec_id)
             .map_or(false, |state| !matches!(state, State::Running(_, _, _)))
     }
@@ -414,12 +398,7 @@ impl Operator {
         if let Some(wf_id) = self.get_wf_id(exec_id).await {
             let (_, end) = self.get_start_end_edges(&wf_id);
             for edge in end {
-                if self
-                    .containers
-                    .lock()
-                    .await
-                    .check_edge_exists(edge.clone(), exec_id)
-                {
+                if self.containers.check_edge_exists(edge.clone(), exec_id) {
                     return false;
                 }
             }
@@ -435,15 +414,14 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
-    pub async fn finish_workflow_by_execute_id(&self, exec_id: ExecutorId) {
+    pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
         debug!("Ending workflow");
-        self.containers.lock().await.finish_containers(exec_id);
+        self.containers.finish_containers(exec_id);
         #[cfg(not(feature = "dev"))]
-        let _ = self.executors.lock().await.remove(&exec_id);
+        let _ = self.executors.remove(&exec_id);
         #[cfg(feature = "dev")]
         {
-            let mut exec = self.executors.lock().await;
-            let wf_id = match exec.remove(&exec_id) {
+            let wf_id = match self.executors.remove(&exec_id) {
                 Some(State::Running(wf_id, wf_tx, _)) => {
                     let _ = wf_tx.send(());
                     wf_id
@@ -452,7 +430,7 @@ impl Operator {
                 Some(State::WaitTimer(wf_id)) => wf_id,
                 None => return,
             };
-            let _ = exec.insert(exec_id, State::WaitTimer(wf_id));
+            let _ = self.executors.insert(exec_id, State::WaitTimer(wf_id));
         }
     }
 
@@ -460,24 +438,22 @@ impl Operator {
     #[tracing::instrument(skip(self))]
     pub async fn check_all_finished(&self) -> bool {
         self.executors
-            .lock()
-            .await
             .iter()
             .all(|(_, state)| !matches!(state, State::Running(_, _, _)))
     }
 
     #[cfg(feature = "dev")]
-    pub(crate) async fn start_timer(&self, exec_id: ExecutorId) {
+    pub(crate) async fn start_timer(&mut self, exec_id: ExecutorId) {
         let wf_id = self.get_wf_id(exec_id).await.unwrap();
-        let mut time = self.time.lock().await;
-        let _ = time.insert((wf_id, exec_id), std::time::Instant::now());
+        let _ = self
+            .time
+            .insert((wf_id, exec_id), std::time::Instant::now());
     }
 
     #[cfg(feature = "dev")]
-    pub(crate) async fn stop_timer(&self, exec_id: ExecutorId) {
+    pub(crate) async fn stop_timer(&mut self, exec_id: ExecutorId) {
         let wf_id = self.get_wf_id(exec_id).await.unwrap();
-        let mut time = self.time.lock().await;
-        if let Some(inst) = time.remove(&(wf_id, exec_id)) {
+        if let Some(inst) = self.time.remove(&(wf_id, exec_id)) {
             tracing::info!(
                 "{:?}({:?}) is finished in {:?}",
                 wf_id,
@@ -485,7 +461,7 @@ impl Operator {
                 inst.elapsed()
             );
         }
-        let _ = self.executors.lock().await.remove(&exec_id);
+        let _ = self.executors.remove(&exec_id);
     }
 }
 
@@ -493,6 +469,7 @@ impl Operator {
 mod test {
     use super::*;
     use crate::node::Choice;
+    use tokio::sync::Mutex;
 
     #[tokio::test]
     async fn test_operator_enqueue_node_if_executable() {
@@ -505,18 +482,17 @@ mod test {
             Choice::All,
         ));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
-        let op = Operator::new(vec![(wf_id, builder)]);
+        let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         let wf_rx = op.start_workflow(exec_id, wf_id).await;
         drop(wf_rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        let mut cons_lock = op.containers.lock().await;
-        op.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
+        op.enqueue_node_if_executable(&[edge], exec_id)
             .await
             .unwrap();
-        let queue = op.queue.lock().await;
+        let queue = op.queue;
         let expected = VecDeque::from(vec![(node, exec_id)]);
         assert_eq!(queue.queue, expected);
     }
@@ -525,11 +501,11 @@ mod test {
     async fn test_operator_start_workflow() {
         let wf_id = WorkflowId::new("test");
         let builder = WorkflowBuilder::default();
-        let op = Operator::new(vec![(wf_id, builder)]);
+        let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         let rx = op.start_workflow(exec_id, wf_id).await;
         drop(rx);
-        let executors = op.executors.lock().await;
+        let executors = op.executors;
         assert_eq!(
             match executors.get(&exec_id).unwrap() {
                 State::Running(id, _, _) => id,
@@ -550,18 +526,16 @@ mod test {
             Choice::All,
         ));
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
-        let op = Operator::new(vec![(wf_id, builder)]);
+        let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
         let wf_rx = op.start_workflow(exec_id, wf_id).await;
         drop(wf_rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
-        let mut cons_lock = op.containers.lock().await;
-        op.enqueue_node_if_executable(&[edge], exec_id, &mut cons_lock)
+        op.enqueue_node_if_executable(&[edge], exec_id)
             .await
             .unwrap();
-        drop(cons_lock);
         let next = op.get_next_node().await.unwrap();
         assert_eq!(next, (node, exec_id));
     }
