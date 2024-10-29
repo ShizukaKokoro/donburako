@@ -84,6 +84,7 @@
 
 #![warn(missing_docs, rustdoc::missing_crate_level_docs, unused_results)]
 
+pub mod channel;
 pub mod container;
 pub mod edge;
 pub mod node;
