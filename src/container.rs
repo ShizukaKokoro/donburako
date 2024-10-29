@@ -376,6 +376,7 @@ mod tests {
     async fn test_container_map_check_edge_exists() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
+        map.entry_by_exec_id(exec_id);
         let edge = Arc::new(Edge::new::<i32>());
         map.add_new_container(edge.clone(), exec_id, 42).unwrap();
 
@@ -389,6 +390,7 @@ mod tests {
     async fn test_container_map_check_node_executable_all() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
+        map.entry_by_exec_id(exec_id);
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
@@ -409,6 +411,7 @@ mod tests {
     async fn test_container_map_check_node_executable_any() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
+        map.entry_by_exec_id(exec_id);
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
         map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
@@ -426,6 +429,7 @@ mod tests {
     async fn test_container_map_get_container() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
+        map.entry_by_exec_id(exec_id);
         let edge = Arc::new(Edge::new::<i32>());
         map.add_new_container(edge.clone(), exec_id, 42).unwrap();
 
@@ -440,6 +444,7 @@ mod tests {
     async fn test_container_map_add_container() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
+        map.entry_by_exec_id(exec_id);
         let edge = Arc::new(Edge::new::<i32>());
         let mut container = Container::default();
         container.store(42);
