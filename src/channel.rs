@@ -38,3 +38,37 @@ pub fn workflow_channel(n: usize) -> (WorkflowTx, WorkflowRx) {
     let (tx, rx) = channel(n);
     (WorkflowTx { tx }, WorkflowRx { rx })
 }
+
+type ExecutorMessage = ();
+
+/// ノードの送信側
+#[derive(Debug, Clone)]
+pub(crate) struct ExecutorTx {
+    tx: Sender<ExecutorMessage>,
+}
+impl ExecutorTx {
+    /// 送信
+    pub async fn send(&self, message: ExecutorMessage) -> Result<(), SendError<ExecutorMessage>> {
+        self.tx.send(message).await
+    }
+}
+
+/// ノードの受信側
+#[derive(Debug)]
+pub(crate) struct ExecutorRx {
+    rx: Receiver<ExecutorMessage>,
+}
+impl ExecutorRx {
+    /// 受信待ち
+    ///
+    /// 全ての [`ExecutorTx`] がドロップすると、`None` が返る。
+    pub async fn recv(&mut self) -> Option<ExecutorMessage> {
+        self.rx.recv().await
+    }
+}
+
+/// ノードチャンネルの作成
+pub(crate) fn executor_channel(n: usize) -> (ExecutorTx, ExecutorRx) {
+    let (tx, rx) = channel(n);
+    (ExecutorTx { tx }, ExecutorRx { rx })
+}
