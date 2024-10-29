@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{channel, error::SendError, Receiver, Sender};
 type WfMessage = ();
 
 /// ワークフローの送信側
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct WorkflowTx {
     tx: Sender<WfMessage>,
 }
@@ -19,6 +19,7 @@ impl WorkflowTx {
 }
 
 /// ワークフローの受信側
+#[derive(Debug)]
 pub struct WorkflowRx {
     rx: Receiver<WfMessage>,
 }
