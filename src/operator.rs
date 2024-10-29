@@ -1,5 +1,6 @@
 //! オペレーターモジュール
 
+use crate::channel::WorkflowTx;
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
@@ -7,7 +8,6 @@ use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::oneshot;
 use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
@@ -69,7 +69,7 @@ enum State {
     /// 実行中
     ///
     /// ワークフローIDと終了通知用のチャンネルと無視する残りのエッジ数
-    Running(WorkflowId, oneshot::Sender<()>, usize),
+    Running(WorkflowId, WorkflowTx, usize),
     /// 終了
     ///
     /// ワークフローID
@@ -160,11 +160,11 @@ impl Operator {
         &mut self,
         exec_id: ExecutorId,
         wf_id: WorkflowId,
-    ) -> oneshot::Receiver<()> {
+        wf_tx: WorkflowTx,
+    ) {
         #[cfg(feature = "dev")]
         tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
         self.containers.entry_by_exec_id(exec_id);
-        let (wf_tx, wf_rx) = oneshot::channel();
         let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         let _ = self
             .executors
@@ -172,7 +172,6 @@ impl Operator {
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
         }
-        wf_rx
     }
 
     /// 新しいコンテナの追加
@@ -312,7 +311,7 @@ impl Operator {
             }
         }
         if finish {
-            self.check_finish(exec_id);
+            self.check_finish(exec_id).await;
         }
         Ok(())
     }
@@ -343,7 +342,7 @@ impl Operator {
     }
 
     #[tracing::instrument(skip(self))]
-    fn check_finish(&mut self, exec_id: ExecutorId) {
+    async fn check_finish(&mut self, exec_id: ExecutorId) {
         let wf_id = if let Some(State::Running(wf_id, wf_tx, ignore_cnt)) =
             self.executors.remove(&exec_id)
         {
@@ -359,7 +358,7 @@ impl Operator {
                     return;
                 }
             }
-            let _ = wf_tx.send(());
+            let _ = wf_tx.send(exec_id).await;
             wf_id
         } else {
             return;
@@ -424,7 +423,7 @@ impl Operator {
         {
             let wf_id = match self.executors.remove(&exec_id) {
                 Some(State::Running(wf_id, wf_tx, _)) => {
-                    let _ = wf_tx.send(());
+                    let _ = wf_tx.send(exec_id).await;
                     wf_id
                 }
                 Some(State::Finished(wf_id)) => wf_id,
@@ -469,7 +468,7 @@ impl Operator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::node::Choice;
+    use crate::{channel::workflow_channel, node::Choice};
     use tokio::sync::Mutex;
 
     #[tokio::test]
@@ -485,8 +484,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let wf_rx = op.start_workflow(exec_id, wf_id).await;
-        drop(wf_rx);
+        let (wf_tx, _) = workflow_channel(1);
+        op.start_workflow(exec_id, wf_id, wf_tx).await;
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
             .unwrap();
@@ -504,8 +503,8 @@ mod test {
         let builder = WorkflowBuilder::default();
         let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let rx = op.start_workflow(exec_id, wf_id).await;
-        drop(rx);
+        let (wf_tx, _) = workflow_channel(1);
+        op.start_workflow(exec_id, wf_id, wf_tx).await;
         let executors = op.executors;
         assert_eq!(
             match executors.get(&exec_id).unwrap() {
@@ -529,7 +528,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(node.clone()).unwrap();
         let mut op = Operator::new(vec![(wf_id, builder)]);
         let exec_id = ExecutorId::default();
-        let wf_rx = op.start_workflow(exec_id, wf_id).await;
+        let (wf_tx, wf_rx) = workflow_channel(1);
+        op.start_workflow(exec_id, wf_id, wf_tx).await;
         drop(wf_rx);
         op.add_new_container(edge.clone(), exec_id, "test")
             .await
@@ -578,7 +578,8 @@ mod test {
         let builder = WorkflowBuilder::default().add_node(Arc::new(node)).unwrap();
         let op = Arc::new(Mutex::new(Operator::new(vec![(wf_id, builder)])));
         let exec_id = ExecutorId::default();
-        let wf_rx = op.lock().await.start_workflow(exec_id, wf_id).await;
+        let (wf_tx, mut wf_rx) = workflow_channel(1);
+        op.lock().await.start_workflow(exec_id, wf_id, wf_tx).await;
         op.lock()
             .await
             .add_new_container(edge, exec_id, "test")
@@ -596,7 +597,7 @@ mod test {
             .unwrap()
             .is_empty());
         assert!(f.await.is_ok());
-        wf_rx.await.unwrap();
+        let _ = wf_rx.recv().await.unwrap();
         assert_eq!(
             op.lock()
                 .await

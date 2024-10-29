@@ -6,7 +6,7 @@ authors = ["ShizukaKokoro"]
 
 [dependencies]
 uuid = { version = "1", features = ["v4"] }
-tokio = "1"
+tokio = { version = "1", features = ["full"] }
 tokio-util = "0"
 thiserror = "1"
 tracing = "0"

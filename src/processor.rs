@@ -2,6 +2,7 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
+use crate::channel::WorkflowTx;
 use crate::edge::Edge;
 use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
@@ -249,11 +250,11 @@ impl Processor {
     /// # Arguments
     ///
     /// * `wf_id` - ワークフローID
-    pub async fn start(&self, wf_id: WorkflowId) -> (ExecutorId, oneshot::Receiver<()>) {
+    pub async fn start(&self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
         let id = ExecutorId::new();
         info!("Start workflow: {:?}({:?})", wf_id, id);
-        let wf_rx = self.op.lock().await.start_workflow(id, wf_id).await;
-        (id, wf_rx)
+        self.op.lock().await.start_workflow(id, wf_id, wf_tx).await;
+        id
     }
 
     /// データを設定

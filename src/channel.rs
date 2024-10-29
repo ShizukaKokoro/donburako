@@ -2,9 +2,10 @@
 //!
 //! 実行状態を各自管理するためのチャンネル。終了を通知する。
 
+use crate::operator::ExecutorId;
 use tokio::sync::mpsc::{channel, error::SendError, Receiver, Sender};
 
-type WfMessage = ();
+type WfMessage = ExecutorId;
 
 /// ワークフローの送信側
 #[derive(Debug, Clone)]
@@ -32,8 +33,8 @@ impl WorkflowRx {
     }
 }
 
-/// チャンネルの作成
-pub fn create_channel(n: usize) -> (WorkflowTx, WorkflowRx) {
+/// ワークフローチャンネルの作成
+pub fn workflow_channel(n: usize) -> (WorkflowTx, WorkflowRx) {
     let (tx, rx) = channel(n);
     (WorkflowTx { tx }, WorkflowRx { rx })
 }
