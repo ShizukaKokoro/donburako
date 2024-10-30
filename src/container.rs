@@ -126,7 +126,7 @@ impl Drop for Container {
 /// 次に向かうべきエッジをキーにして、コンテナを格納する。
 /// 外部からはエッジを参照して、コンテナを取り出すことができる。
 #[derive(Default, Debug)]
-pub(crate) struct ContainerMap(HashMap<ExecutorId, HashMap<Arc<Edge>, Container>>);
+pub(crate) struct ContainerMap(HashMap<ExecutorId, HashMap<Arc<Edge>, Option<Container>>>);
 impl ContainerMap {
     /// 新しいコンテナマップを確保する
     #[tracing::instrument(skip(self))]
@@ -176,7 +176,7 @@ impl ContainerMap {
     ///
     /// 存在する場合は true、そうでない場合は false
     pub(crate) fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
-        self.0.contains_key(&exec_id) && self.0[&exec_id].contains_key(&edge)
+        self.0.contains_key(&exec_id) && self.0[&exec_id].get(&edge).unwrap_or(&None).is_some()
     }
 
     /// ノードが実行できるか確認する
@@ -227,7 +227,7 @@ impl ContainerMap {
         edge: Arc<Edge>,
         exec_id: ExecutorId,
     ) -> Option<Container> {
-        self.0.get_mut(&exec_id)?.remove(&edge)
+        self.0.get_mut(&exec_id)?.get_mut(&edge)?.take()
     }
 
     /// 既存のコンテナの追加
@@ -250,7 +250,11 @@ impl ContainerMap {
             return Err(ContainerError::DataNotFound);
         }
         if let Some(map) = self.0.get_mut(&exec_id) {
-            let _ = map.insert(edge, container);
+            if map.contains_key(&edge) {
+                debug!("Container is already exists");
+                return Ok(());
+            }
+            assert!(map.insert(edge, Some(container)).is_none());
         } else {
             debug!("Container is dropped safely");
             container.take_anyway();
@@ -268,7 +272,9 @@ impl ContainerMap {
         debug!("Finish containers with exec_id");
         if let Some(con_map) = self.0.get_mut(&exec_id) {
             for (_, container) in con_map.iter_mut() {
-                container.take_anyway();
+                if let Some(mut container) = container.take() {
+                    container.take_anyway();
+                }
             }
             let _ = self.0.remove(&exec_id);
         }
@@ -278,11 +284,13 @@ impl Drop for ContainerMap {
     fn drop(&mut self) {
         for (exec_id, con_map) in self.0.iter_mut() {
             for (edge, container) in con_map.iter_mut() {
-                warn!(
-                    "ContainerMap is dropped with data (edge: {:?}, exec_id: {:?})",
-                    edge, exec_id
-                );
-                container.take_anyway();
+                if let Some(mut container) = container.take() {
+                    warn!(
+                        "ContainerMap is dropped with data (edge: {:?}, exec_id: {:?})",
+                        edge, exec_id
+                    );
+                    container.take_anyway();
+                }
             }
         }
     }
