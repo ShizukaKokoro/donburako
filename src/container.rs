@@ -179,6 +179,20 @@ impl ContainerMap {
         self.0.contains_key(&exec_id) && self.0[&exec_id].get(&edge).unwrap_or(&None).is_some()
     }
 
+    /// エッジがあるかどうか確認する
+    ///
+    /// # Arguments
+    ///
+    /// * `edges` - エッジ
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// エッジが全てある場合は true、そうでない場合は false
+    pub(crate) fn check_edges(&self, edges: &[Arc<Edge>], exec_id: ExecutorId) -> bool {
+        self.0.contains_key(&exec_id) && edges.iter().all(|e| self.0[&exec_id].contains_key(e))
+    }
+
     /// ノードが実行できるか確認する
     ///
     /// ノードは全ての入力エッジに対して、コンテナが格納されることで実行可能となる。
