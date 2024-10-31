@@ -3,7 +3,12 @@
 //! 実行状態を各自管理するためのチャンネル。終了を通知する。
 
 use crate::operator::ExecutorId;
-use tokio::sync::mpsc::{channel, error::SendError, Receiver, Sender};
+use tokio::sync::mpsc::{
+    channel,
+    error::{SendError, TrySendError},
+    Receiver, Sender,
+};
+use tracing::warn;
 
 type WfMessage = ExecutorId;
 
@@ -60,8 +65,18 @@ pub(crate) struct ExecutorTx {
 }
 impl ExecutorTx {
     /// 送信
-    pub async fn send(&self, message: ExecutorMessage) -> Result<(), SendError<ExecutorMessage>> {
-        self.tx.send(message).await
+    pub fn send(&self, message: ExecutorMessage) -> Result<(), TrySendError<ExecutorMessage>> {
+        match self.tx.try_send(message) {
+            Ok(_) => Ok(()),
+            Err(TrySendError::Closed(message)) => Err(TrySendError::Closed(message)),
+            Err(TrySendError::Full(message)) => {
+                warn!(
+                    "Failed to send message because the channel is full: {:?}",
+                    message
+                );
+                Ok(())
+            }
+        }
     }
 }
 

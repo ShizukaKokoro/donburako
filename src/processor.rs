@@ -139,7 +139,7 @@ impl ProcessorBuilder {
                             spawn_blocking(move || {
                                 rt_handle.block_on(async {
                                     let result = node.run(op_clone, exec_id).await;
-                                    let _ = tx_clone.send(ExecutorMessage::Done(key)).await;
+                                    let _ = tx_clone.send(ExecutorMessage::Done(key));
                                     result
                                 })?;
                                 Ok(node.name())
@@ -147,7 +147,7 @@ impl ProcessorBuilder {
                         } else {
                             spawn(async move {
                                 node.run(op_clone, exec_id).await?;
-                                let _ = tx_clone.send(ExecutorMessage::Done(key)).await;
+                                let _ = tx_clone.send(ExecutorMessage::Done(key));
                                 Ok(node.name())
                             })
                         };

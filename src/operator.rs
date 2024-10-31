@@ -155,7 +155,7 @@ impl Operator {
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
         }
-        self.exec_tx.send(ExecutorMessage::Start).await.unwrap();
+        self.exec_tx.send(ExecutorMessage::Start).unwrap();
         exec_id
     }
 
@@ -272,15 +272,19 @@ impl Operator {
     #[tracing::instrument(skip(self))]
     pub async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
         debug!("Check executable nodes");
+        let mut flag = false;
         for e in edges {
             let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
             if let Some(node) = self.workflows[wf_id].get_node(e) {
                 if self.containers.is_ready(&node, exec_id) {
                     self.queue.push(node, exec_id);
+                    flag = true;
                 }
             }
         }
-        self.exec_tx.send(ExecutorMessage::Update).await.unwrap();
+        if flag {
+            self.exec_tx.send(ExecutorMessage::Update).unwrap();
+        }
     }
 
     /// ワークフローの終了確認
