@@ -78,7 +78,7 @@ impl ProcessorBuilder {
                         let rt_handle = Handle::current();
                         spawn_blocking(move || {
                             rt_handle.block_on(async { node.run(op_clone, exec_id).await })?;
-                            let _ = tx_clone.clone().send(());
+                            let _ = tx_clone.send(());
                             Ok::<&'static str, NodeError>(node.name())
                         });
                     }
