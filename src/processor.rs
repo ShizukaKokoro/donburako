@@ -68,7 +68,9 @@ impl ProcessorBuilder {
         let shutdown_token = CancellationToken::new();
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
-            loop {}
+            while let Some(message) = exec_rx.recv().await {
+                println!("message: {:?}", message);
+            }
             Ok(())
         });
 

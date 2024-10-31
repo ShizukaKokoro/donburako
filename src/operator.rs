@@ -136,6 +136,7 @@ impl Operator {
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
         }
+        self.exec_tx.send(()).await.unwrap();
         exec_id
     }
 
