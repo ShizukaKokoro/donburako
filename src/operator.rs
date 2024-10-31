@@ -1,6 +1,6 @@
 //! オペレーターモジュール
 
-use crate::channel::WorkflowTx;
+use crate::channel::{ExecutorTx, WorkflowTx};
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
@@ -76,6 +76,7 @@ impl StatusMap {
 /// コンテナと実行IDごとのワークフローの状態を管理する。
 #[derive(Debug)]
 pub struct Operator {
+    exec_tx: ExecutorTx,
     workflows: HashMap<WorkflowId, Workflow>,
     status: StatusMap,
     containers: ContainerMap,
@@ -87,12 +88,13 @@ impl Operator {
     /// # Arguments
     ///
     /// * `builders` - ワークフロービルダーのリスト
-    pub(crate) fn new(builders: Vec<(WorkflowId, WorkflowBuilder)>) -> Self {
+    pub(crate) fn new(exec_tx: ExecutorTx, builders: Vec<(WorkflowId, WorkflowBuilder)>) -> Self {
         let mut workflows = HashMap::new();
         for (id, builder) in builders {
             let _ = workflows.insert(id, builder.build());
         }
         Self {
+            exec_tx,
             workflows,
             status: StatusMap(HashMap::new()),
             containers: ContainerMap::default(),

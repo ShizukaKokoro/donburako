@@ -58,7 +58,8 @@ impl ProcessorBuilder {
     /// ビルド
     pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
-        let op = Arc::new(Mutex::new(Operator::new(self.workflow)));
+        let (exec_tx, mut exec_rx) = executor_channel(n);
+        let op = Arc::new(Mutex::new(Operator::new(exec_tx, self.workflow)));
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
@@ -66,7 +67,6 @@ impl ProcessorBuilder {
         let cancel_clone = cancel.clone();
         let shutdown_token = CancellationToken::new();
         let shutdown_clone = shutdown_token.clone();
-        let (exec_tx, mut exec_rx) = executor_channel(n);
         let handle = spawn(async move {
             loop {}
             Ok(())
