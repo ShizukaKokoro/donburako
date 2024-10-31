@@ -165,6 +165,29 @@ impl ContainerMap {
         Ok(())
     }
 
+    /// 実行準備ができているか確認する
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - ノード
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// 実行準備ができている場合は true、そうでない場合は false
+    pub(crate) fn is_ready(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
+        match node.choice() {
+            Choice::All => node
+                .inputs()
+                .iter()
+                .all(|e| self.check_edge_exists(e.clone(), exec_id)),
+            Choice::Any => node
+                .inputs()
+                .iter()
+                .any(|e| self.check_edge_exists(e.clone(), exec_id)),
+        }
+    }
+
     /// エッジに対応するコンテナが存在するか確認する
     ///
     /// # Arguments
@@ -175,55 +198,8 @@ impl ContainerMap {
     /// # Returns
     ///
     /// 存在する場合は true、そうでない場合は false
-    pub(crate) fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
+    fn check_edge_exists(&self, edge: Arc<Edge>, exec_id: ExecutorId) -> bool {
         self.0.contains_key(&exec_id) && self.0[&exec_id].get(&edge).unwrap_or(&None).is_some()
-    }
-
-    /// エッジがあるかどうか確認する
-    ///
-    /// # Arguments
-    ///
-    /// * `edges` - エッジ
-    /// * `exec_id` - 実行ID
-    ///
-    /// # Returns
-    ///
-    /// エッジが全てある場合は true、そうでない場合は false
-    pub(crate) fn check_edges(&self, edges: &[Arc<Edge>], exec_id: ExecutorId) -> bool {
-        self.0.contains_key(&exec_id) && edges.iter().all(|e| self.0[&exec_id].contains_key(e))
-    }
-
-    /// ノードが実行できるか確認する
-    ///
-    /// ノードは全ての入力エッジに対して、コンテナが格納されることで実行可能となる。
-    ///
-    /// # Arguments
-    ///
-    /// * `node` - ノード
-    /// * `exec_id` - 実行ID
-    ///
-    /// # Returns
-    ///
-    /// 実行可能な場合は true、そうでない場合は false
-    pub(crate) fn check_node_executable(&self, node: &Arc<Node>, exec_id: ExecutorId) -> bool {
-        match node.choice() {
-            Choice::All => {
-                for edge in node.inputs() {
-                    if !self.check_edge_exists(edge.clone(), exec_id) {
-                        return false;
-                    }
-                }
-                true
-            }
-            Choice::Any => {
-                for edge in node.inputs() {
-                    if self.check_edge_exists(edge.clone(), exec_id) {
-                        return true;
-                    }
-                }
-                false
-            }
-        }
     }
 
     /// コンテナの取得
@@ -409,7 +385,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_container_map_check_node_executable_all() {
+    async fn test_container_map_is_ready_all() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
         map.entry_by_exec_id(exec_id);
@@ -423,14 +399,14 @@ mod tests {
             "node",
             Choice::All,
         ));
-        assert!(!map.check_node_executable(&node, exec_id));
+        assert!(!map.is_ready(&node, exec_id));
 
         map.add_new_container(edge1.clone(), exec_id, "42").unwrap();
-        assert!(map.check_node_executable(&node, exec_id));
+        assert!(map.is_ready(&node, exec_id));
     }
 
     #[tokio::test]
-    async fn test_container_map_check_node_executable_any() {
+    async fn test_container_map_is_ready_any() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
         map.entry_by_exec_id(exec_id);
@@ -444,7 +420,7 @@ mod tests {
             "node",
             Choice::Any,
         ));
-        assert!(map.check_node_executable(&node, exec_id));
+        assert!(map.is_ready(&node, exec_id));
     }
 
     #[tokio::test]

@@ -8,7 +8,6 @@ use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::task::spawn_blocking;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -73,6 +72,10 @@ struct StatusMap(HashMap<ExecutorId, (WorkflowId, WorkflowTx)>);
 impl StatusMap {
     fn start(&mut self, exec_id: ExecutorId, wf_id: WorkflowId, tx: WorkflowTx) {
         let _ = self.0.insert(exec_id, (wf_id, tx));
+    }
+
+    fn get_workflow_id(&self, exec_id: &ExecutorId) -> Option<&WorkflowId> {
+        self.0.get(exec_id).map(|(wf_id, _)| wf_id)
     }
 }
 
@@ -173,6 +176,7 @@ impl Operator {
         debug!("Add new container");
         self.containers
             .add_new_container(edge.clone(), exec_id, data)?;
+        self.check_executable_nodes(&[edge], exec_id).await;
         Ok(())
     }
 
@@ -214,7 +218,7 @@ impl Operator {
     ///
     /// # Arguments
     ///
-    /// * `edge` - エッジ
+    /// * `edges` - エッジ
     /// * `exec_id` - 実行ID
     /// * `container` - コンテナ
     ///
@@ -224,15 +228,38 @@ impl Operator {
     #[tracing::instrument(skip(self, container))]
     pub async fn add_container(
         &mut self,
-        edge: &[Arc<Edge>],
+        edges: &[Arc<Edge>],
         exec_id: ExecutorId,
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
         debug!("Add container: {:?}", container);
-        for (e, c) in edge.iter().zip(container) {
+        for (e, c) in edges.iter().zip(container) {
             self.containers.add_container(e.clone(), exec_id, c)?;
         }
+        self.check_executable_nodes(edges, exec_id).await;
         Ok(())
+    }
+
+    /// 実行可能なノードの精査
+    ///
+    /// 更新があったエッジに対して、実行可能なノードをキューに追加する。
+    ///
+    /// # Arguments
+    ///
+    /// * `edges` - エッジ
+    /// * `exec_id` - 実行ID
+    #[tracing::instrument(skip(self))]
+    pub async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
+        debug!("Check executable nodes");
+        for e in edges {
+            let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
+            if let Some(node) = self.workflows[wf_id].get_node(e) {
+                if self.containers.is_ready(&node, exec_id) {
+                    self.queue.push(node, exec_id);
+                }
+            }
+        }
+        self.exec_tx.send(()).await.unwrap();
     }
 
     /// ワークフローの強制終了
