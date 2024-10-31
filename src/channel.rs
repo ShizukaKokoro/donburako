@@ -8,7 +8,7 @@ use tokio::sync::mpsc::{
     error::{SendError, TrySendError},
     Receiver, Sender,
 };
-use tracing::warn;
+use tracing::{debug, warn};
 
 type WfMessage = ExecutorId;
 
@@ -68,6 +68,11 @@ pub(crate) struct ExecutorTx {
 impl ExecutorTx {
     /// 送信
     pub fn send(&self, message: ExecutorMessage) -> Result<(), TrySendError<ExecutorMessage>> {
+        debug!(
+            "Send message: {:?} (capacity: {})",
+            message,
+            self.tx.capacity()
+        );
         match self.tx.try_send(message) {
             Ok(_) => Ok(()),
             Err(TrySendError::Closed(message)) => Err(TrySendError::Closed(message)),
