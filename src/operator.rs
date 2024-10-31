@@ -281,12 +281,19 @@ impl Operator {
     ///
     /// 終了している場合は true
     #[tracing::instrument(skip(self))]
-    pub(crate) fn is_finished(&self, exec_id: ExecutorId) -> bool {
+    pub(crate) async fn is_finished(&mut self, exec_id: ExecutorId) -> bool {
         debug!("Check finished");
         if let Some(wf_id) = self.status.get_workflow_id(&exec_id) {
             let edges = self.workflows[wf_id].end_edges();
-            self.containers
+            if self
+                .containers
                 .check_edges_exists_in_exec_id(exec_id, edges)
+            {
+                self.status.end(exec_id).await;
+                true
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -301,6 +308,5 @@ impl Operator {
     pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
         debug!("Finish workflow");
         self.containers.finish_containers(exec_id);
-        self.status.end(exec_id).await;
     }
 }
