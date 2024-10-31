@@ -337,4 +337,8 @@ impl Operator {
     pub fn is_all_finished(&self) -> bool {
         self.status.is_empty()
     }
+
+    pub(crate) fn send_update(&self) {
+        self.exec_tx.send(ExecutorMessage::Update).unwrap();
+    }
 }

@@ -115,6 +115,7 @@ impl ProcessorBuilder {
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
+                debug!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
                         let exec_id = handlers.remove(key);
@@ -224,6 +225,7 @@ impl Processor {
         exec_id: ExecutorId,
     ) -> Result<T, ProcessorError> {
         let mut cons = self.op.lock().await.get_container(&[edge], exec_id).await?;
+        self.op.lock().await.send_update();
         if cons.len() == 1 {
             let mut con = cons.pop_front().unwrap();
             assert_eq!(cons.len(), 0);
