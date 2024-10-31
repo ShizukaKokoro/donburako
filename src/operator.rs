@@ -81,8 +81,8 @@ impl StatusMap {
     #[tracing::instrument(skip(self))]
     async fn end(&mut self, exec_id: ExecutorId) {
         let (_, wf_tx) = self.0.remove(&exec_id).unwrap();
-        wf_tx.send(exec_id).await.unwrap();
         debug!("Send end message");
+        wf_tx.send(exec_id).await.unwrap();
     }
 
     fn is_empty(&self) -> bool {
@@ -184,6 +184,9 @@ impl Operator {
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), OperatorError> {
+        if self.workflows[self.status.get_workflow_id(&exec_id).unwrap()].is_ignored(&edge) {
+            return Ok(());
+        }
         debug!("Add new container");
         self.containers
             .add_new_container(edge.clone(), exec_id, data)?;
@@ -244,8 +247,15 @@ impl Operator {
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
         debug!("Add container: {:?}", container);
-        for (e, c) in edges.iter().zip(container) {
-            self.containers.add_container(e.clone(), exec_id, c)?;
+        let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
+        for (e, mut c) in edges.iter().zip(container) {
+            if self.workflows[wf_id].is_ignored(e) {
+                debug!("Ignore edge");
+                c.take_anyway();
+                continue;
+            } else {
+                self.containers.add_container(e.clone(), exec_id, c)?;
+            }
         }
         self.check_executable_nodes(edges, exec_id).await;
         Ok(())
