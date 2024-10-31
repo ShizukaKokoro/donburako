@@ -47,16 +47,20 @@ struct ExecutableQueue {
 }
 impl ExecutableQueue {
     /// 新しい実行可能なノードのキューの生成
+    #[tracing::instrument(skip(self))]
     fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) {
+        debug!("Push node");
         if self.set.insert((node.clone(), exec_id)) {
             self.queue.push_back((node.clone(), exec_id));
         }
     }
 
     /// ノードの取得
+    #[tracing::instrument(skip(self))]
     fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
         if let Some(item) = self.queue.pop_front() {
             assert!(self.set.remove(&item));
+            debug!("Pop node");
             Some(item)
         } else {
             None
