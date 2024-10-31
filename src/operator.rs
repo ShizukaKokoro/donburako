@@ -104,6 +104,8 @@ pub struct Operator {
     status: StatusMap,
     containers: ContainerMap,
     queue: ExecutableQueue,
+    #[cfg(feature = "dev")]
+    timer: HashMap<ExecutorId, std::time::Instant>,
 }
 impl Operator {
     /// 新しいオペレーターの生成
@@ -122,6 +124,8 @@ impl Operator {
             status: StatusMap(HashMap::new()),
             containers: ContainerMap::default(),
             queue: ExecutableQueue::default(),
+            #[cfg(feature = "dev")]
+            timer: HashMap::new(),
         }
     }
 
@@ -153,7 +157,10 @@ impl Operator {
     pub async fn start_workflow(&mut self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
         let exec_id = ExecutorId::new();
         #[cfg(feature = "dev")]
-        tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        {
+            tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+            let _ = self.timer.insert(exec_id, std::time::Instant::now());
+        }
         self.status.start(exec_id, wf_id, wf_tx);
         self.containers.entry_by_exec_id(exec_id);
         let mut flag = false;
@@ -351,5 +358,14 @@ impl Operator {
 
     pub(crate) fn send_update(&self) {
         let _ = self.exec_tx.send(ExecutorMessage::Update);
+    }
+
+    #[cfg(feature = "dev")]
+    pub(crate) fn stop_timer(&mut self, exec_id: &ExecutorId) {
+        if let Some(start) = self.timer.remove(exec_id) {
+            let end = std::time::Instant::now();
+            let duration = end - start;
+            tracing::info!("{:?} is finished in {:?}", exec_id, duration);
+        }
     }
 }
