@@ -339,6 +339,6 @@ impl Operator {
     }
 
     pub(crate) fn send_update(&self) {
-        self.exec_tx.send(ExecutorMessage::Update).unwrap();
+        let _ = self.exec_tx.send(ExecutorMessage::Update);
     }
 }
