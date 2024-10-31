@@ -141,6 +141,8 @@ impl ProcessorBuilder {
         let shutdown_token = CancellationToken::new();
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
+            #[cfg(feature = "dev")]
+            let mut start = std::time::Instant::now();
             while let Some(message) = select! {
             message = exec_rx.recv() => message,
             _ = cancel_clone.cancelled() => None,
@@ -151,6 +153,7 @@ impl ProcessorBuilder {
                     ExecutorMessage::Done(key) => {
                         let exec_id = handlers.remove(key);
                         if op.lock().await.is_finished(exec_id).await {
+                            #[cfg(feature = "dev")]
                             op.lock().await.stop_timer(&exec_id);
                             debug!("Finish workflow: {:?}", exec_id);
                             if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
@@ -191,6 +194,11 @@ impl ProcessorBuilder {
                     }
                 } else {
                     debug!("No retain");
+                }
+                #[cfg(feature = "dev")]
+                {
+                    debug!("Elapsed time: {:?}", start.elapsed());
+                    start = std::time::Instant::now();
                 }
             }
             info!("Finish processor");

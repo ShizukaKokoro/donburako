@@ -175,7 +175,13 @@ impl Operator {
 
     /// 次に実行するノードの取得
     pub(crate) fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
-        self.queue.pop()
+        if let Some((node, exec_id)) = self.queue.pop() {
+            #[cfg(feature = "dev")]
+            self.check_timer(&exec_id);
+            Some((node, exec_id))
+        } else {
+            None
+        }
     }
 
     /// 新しいコンテナの追加
@@ -306,6 +312,8 @@ impl Operator {
         }
         if flag {
             self.exec_tx.send(ExecutorMessage::Update).unwrap();
+            #[cfg(feature = "dev")]
+            self.check_timer(&exec_id);
         }
     }
 
@@ -358,6 +366,13 @@ impl Operator {
 
     pub(crate) fn send_update(&self) {
         let _ = self.exec_tx.send(ExecutorMessage::Update);
+    }
+
+    #[cfg(feature = "dev")]
+    fn check_timer(&self, exec_id: &ExecutorId) {
+        if let Some(start) = self.timer.get(exec_id) {
+            tracing::debug!("{:?} is at {:?}", exec_id, start.elapsed());
+        }
     }
 
     #[cfg(feature = "dev")]
