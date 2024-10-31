@@ -247,7 +247,10 @@ impl Operator {
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
         debug!("Add container: {:?}", container);
-        let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
+        let wf_id = self
+            .status
+            .get_workflow_id(&exec_id)
+            .ok_or(OperatorError::NotRunning(exec_id))?;
         for (e, mut c) in edges.iter().zip(container) {
             if self.workflows[wf_id].is_ignored(e) {
                 debug!("Ignore edge");
