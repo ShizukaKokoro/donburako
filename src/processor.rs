@@ -86,9 +86,17 @@ impl<T> Handlers<T> {
 }
 
 /// プロセッサービルダー
-#[derive(Default)]
 pub struct ProcessorBuilder {
     workflow: Vec<(WorkflowId, WorkflowBuilder)>,
+    capacity: usize,
+}
+impl Default for ProcessorBuilder {
+    fn default() -> Self {
+        Self {
+            workflow: Vec::new(),
+            capacity: 100,
+        }
+    }
 }
 impl ProcessorBuilder {
     /// ワークフローの追加
@@ -99,17 +107,34 @@ impl ProcessorBuilder {
     pub fn add_workflow(self, wf_id: WorkflowId, wf: WorkflowBuilder) -> Self {
         let mut wfs = self.workflow;
         wfs.push((wf_id, wf));
-        Self { workflow: wfs }
+        Self {
+            workflow: wfs,
+            ..self
+        }
+    }
+
+    /// キューの容量の設定
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - キューの容量
+    pub fn set_capacity(self, capacity: usize) -> Self {
+        Self { capacity, ..self }
     }
 
     /// ビルド
-    pub fn build(self, n: usize) -> Processor {
+    ///
+    /// # Arguments
+    ///
+    /// * `handler_num` - 一度に実行されるハンドラーの数
+    #[tracing::instrument(skip(self))]
+    pub fn build(self, handler_num: usize) -> Processor {
         debug!("Start building processor");
-        let (exec_tx, mut exec_rx) = executor_channel(n);
+        let (exec_tx, mut exec_rx) = executor_channel(self.capacity);
         let op = Arc::new(Mutex::new(Operator::new(exec_tx.clone(), self.workflow)));
         let op_clone = op.clone();
-        let mut handlers: Handlers<Result<_, NodeError>> = Handlers::new(n);
-        debug!("End setting up processor: capacity={}", n);
+        let mut handlers: Handlers<Result<_, NodeError>> = Handlers::new(handler_num);
+        debug!("End setting up processor",);
 
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
