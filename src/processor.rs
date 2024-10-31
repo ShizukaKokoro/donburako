@@ -58,14 +58,13 @@ impl<T> Handlers<T> {
     }
 
     fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId) {
-        if let Some(retain) = self.retains.pop_front() {
-            self.handles[retain] = Some((handle, exec_id));
-            #[cfg(feature = "dev")]
-            debug!(
-                "{:?} tasks are running",
-                self.handles.len() - self.retains.len()
-            );
-        }
+        let retain = self.retains.pop_front().unwrap();
+        self.handles[retain] = Some((handle, exec_id));
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running",
+            self.handles.len() - self.retains.len()
+        );
     }
 
     fn remove(&mut self, key: usize) {
@@ -76,6 +75,10 @@ impl<T> Handlers<T> {
             "{:?} tasks are running",
             self.handles.len() - self.retains.len()
         );
+    }
+
+    fn has_retain(&self) -> bool {
+        !self.retains.is_empty()
     }
 }
 
@@ -112,27 +115,31 @@ impl ProcessorBuilder {
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
                 println!("message: {:?}", message);
-                if let Some((node, exec_id)) = op.lock().await.next_node() {
-                    let tx_clone = exec_tx.clone();
-                    let op_clone = op.clone();
-                    let handle = if node.is_blocking() {
-                        let rt_handle = Handle::current();
-                        spawn_blocking(move || {
-                            rt_handle.block_on(async {
-                                let result = node.run(op_clone, exec_id).await;
+                if handlers.has_retain() {
+                    if let Some((node, exec_id)) = op.lock().await.next_node() {
+                        let tx_clone = exec_tx.clone();
+                        let op_clone = op.clone();
+                        let handle = if node.is_blocking() {
+                            let rt_handle = Handle::current();
+                            spawn_blocking(move || {
+                                rt_handle.block_on(async {
+                                    let result = node.run(op_clone, exec_id).await;
+                                    let _ = tx_clone.send(()).await;
+                                    result
+                                })?;
+                                Ok(node.name())
+                            })
+                        } else {
+                            spawn(async move {
+                                node.run(op_clone, exec_id).await?;
                                 let _ = tx_clone.send(()).await;
-                                result
-                            })?;
-                            Ok(node.name())
-                        })
-                    } else {
-                        spawn(async move {
-                            node.run(op_clone, exec_id).await?;
-                            let _ = tx_clone.send(()).await;
-                            Ok(node.name())
-                        })
-                    };
-                    handlers.push(handle, exec_id);
+                                Ok(node.name())
+                            })
+                        };
+                        handlers.push(handle, exec_id);
+                    }
+                } else {
+                    warn!("No retain");
                 }
             }
             Ok(())
