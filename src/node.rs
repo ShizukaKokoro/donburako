@@ -187,6 +187,7 @@ impl Node {
 impl std::fmt::Debug for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
+            .field("name", &self.name)
             .field("inputs", &self.inputs)
             .field("manage_cnt", &self.manage_cnt)
             .field("outputs", &self.outputs)
