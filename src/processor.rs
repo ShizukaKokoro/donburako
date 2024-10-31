@@ -2,7 +2,7 @@
 //!
 //! ワークフローを保持し、コンテナを移動させる。
 
-use crate::channel::{executor_channel, WorkflowTx};
+use crate::channel::{executor_channel, ExecutorMessage, WorkflowTx};
 use crate::edge::Edge;
 use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
@@ -57,9 +57,8 @@ impl<T> Handlers<T> {
         Self { handles, retains }
     }
 
-    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId) {
-        let retain = self.retains.pop_front().unwrap();
-        self.handles[retain] = Some((handle, exec_id));
+    fn push(&mut self, key: usize, handle: JoinHandle<T>, exec_id: ExecutorId) {
+        self.handles[key] = Some((handle, exec_id));
         #[cfg(feature = "dev")]
         debug!(
             "{:?} tasks are running",
@@ -77,8 +76,8 @@ impl<T> Handlers<T> {
         );
     }
 
-    fn has_retain(&self) -> bool {
-        !self.retains.is_empty()
+    fn has_retain(&mut self) -> Option<usize> {
+        self.retains.pop_front()
     }
 }
 
@@ -115,7 +114,7 @@ impl ProcessorBuilder {
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
                 println!("message: {:?}", message);
-                if handlers.has_retain() {
+                if let Some(key) = handlers.has_retain() {
                     if let Some((node, exec_id)) = op.lock().await.next_node() {
                         let tx_clone = exec_tx.clone();
                         let op_clone = op.clone();
@@ -124,7 +123,7 @@ impl ProcessorBuilder {
                             spawn_blocking(move || {
                                 rt_handle.block_on(async {
                                     let result = node.run(op_clone, exec_id).await;
-                                    let _ = tx_clone.send(()).await;
+                                    let _ = tx_clone.send(ExecutorMessage::Done(key)).await;
                                     result
                                 })?;
                                 Ok(node.name())
@@ -132,11 +131,11 @@ impl ProcessorBuilder {
                         } else {
                             spawn(async move {
                                 node.run(op_clone, exec_id).await?;
-                                let _ = tx_clone.send(()).await;
+                                let _ = tx_clone.send(ExecutorMessage::Done(key)).await;
                                 Ok(node.name())
                             })
                         };
-                        handlers.push(handle, exec_id);
+                        handlers.push(key, handle, exec_id);
                     }
                 } else {
                     warn!("No retain");

@@ -39,7 +39,19 @@ pub fn workflow_channel(n: usize) -> (WorkflowTx, WorkflowRx) {
     (WorkflowTx { tx }, WorkflowRx { rx })
 }
 
-type ExecutorMessage = ();
+#[derive(Debug)]
+pub(crate) enum ExecutorMessage {
+    /// ワークフローの実行開始
+    Start,
+    /// コンテナの更新
+    Update,
+    /// ノードの実行完了
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - ハンドラーのキー
+    Done(usize),
+}
 
 /// ノードの送信側
 #[derive(Debug, Clone)]

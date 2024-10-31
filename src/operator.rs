@@ -1,6 +1,6 @@
 //! オペレーターモジュール
 
-use crate::channel::{ExecutorTx, WorkflowTx};
+use crate::channel::{ExecutorMessage, ExecutorTx, WorkflowTx};
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::Node;
@@ -144,7 +144,7 @@ impl Operator {
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
         }
-        self.exec_tx.send(()).await.unwrap();
+        self.exec_tx.send(ExecutorMessage::Start).await.unwrap();
         exec_id
     }
 
@@ -259,7 +259,7 @@ impl Operator {
                 }
             }
         }
-        self.exec_tx.send(()).await.unwrap();
+        self.exec_tx.send(ExecutorMessage::Update).await.unwrap();
     }
 
     /// ワークフローの強制終了
