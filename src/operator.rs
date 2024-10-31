@@ -80,9 +80,10 @@ impl StatusMap {
 
     #[tracing::instrument(skip(self))]
     async fn end(&mut self, exec_id: ExecutorId) {
-        let (_, wf_tx) = self.0.remove(&exec_id).unwrap();
-        debug!("Send end message");
-        wf_tx.send(exec_id).await.unwrap();
+        if let Some((_, wf_tx)) = self.0.remove(&exec_id) {
+            debug!("Send end message");
+            let _ = wf_tx.send(exec_id).await;
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -329,6 +330,7 @@ impl Operator {
     pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
         debug!("Finish workflow");
         self.containers.finish_containers(exec_id);
+        self.status.end(exec_id).await;
     }
 
     /// ワークフローが全て終了しているか確認

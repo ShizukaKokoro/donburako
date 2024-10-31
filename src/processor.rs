@@ -115,7 +115,6 @@ impl ProcessorBuilder {
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
-                info!("message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
                         let exec_id = handlers.remove(key);
@@ -129,7 +128,6 @@ impl ProcessorBuilder {
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
                 }
-                println!("handlers: {:?}", handlers.retains);
                 if let Some(key) = handlers.has_retain() {
                     if let Some((node, exec_id)) = op.lock().await.next_node() {
                         let tx_clone = exec_tx.clone();
