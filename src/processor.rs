@@ -94,11 +94,14 @@ impl Processor {
     /// # Arguments
     ///
     /// * `wf_id` - ワークフローID
+    /// * `wf_tx` - ワークフローの送信チャンネル
+    ///
+    /// # Returns
+    ///
+    /// 実行ID
     pub async fn start(&self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
-        let id = ExecutorId::new();
-        info!("Start workflow: {:?}({:?})", wf_id, id);
-        self.op.lock().await.start_workflow(id, wf_id, wf_tx).await;
-        id
+        info!("Start workflow: {:?}", wf_id);
+        self.op.lock().await.start_workflow(wf_id, wf_tx).await
     }
 
     /// データを設定

@@ -63,12 +63,21 @@ impl ExecutableQueue {
     }
 }
 
+#[derive(Debug)]
+struct StatusMap(HashMap<ExecutorId, WorkflowTx>);
+impl StatusMap {
+    fn start(&mut self, exec_id: ExecutorId, tx: WorkflowTx) {
+        let _ = self.0.insert(exec_id, tx);
+    }
+}
+
 /// オペレーター
 ///
 /// コンテナと実行IDごとのワークフローの状態を管理する。
 #[derive(Debug)]
 pub struct Operator {
     workflows: HashMap<WorkflowId, Workflow>,
+    status: StatusMap,
     containers: ContainerMap,
     queue: ExecutableQueue,
 }
@@ -85,6 +94,7 @@ impl Operator {
         }
         Self {
             workflows,
+            status: StatusMap(HashMap::new()),
             containers: ContainerMap::default(),
             queue: ExecutableQueue::default(),
         }
@@ -109,21 +119,22 @@ impl Operator {
     ///
     /// # Arguments
     ///
-    /// * `exec_id` - 実行ID
     /// * `wf_id` - ワークフローID
-    pub async fn start_workflow(
-        &mut self,
-        exec_id: ExecutorId,
-        wf_id: WorkflowId,
-        wf_tx: WorkflowTx,
-    ) {
+    /// * `wf_tx` - ワークフローの送信チャンネル
+    ///
+    /// # Returns
+    ///
+    /// 実行ID
+    pub async fn start_workflow(&mut self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
+        let exec_id = ExecutorId::new();
         #[cfg(feature = "dev")]
         tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+        self.status.start(exec_id, wf_tx);
         self.containers.entry_by_exec_id(exec_id);
-        unimplemented!();
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
         }
+        exec_id
     }
 
     /// 新しいコンテナの追加
