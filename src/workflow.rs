@@ -4,10 +4,10 @@
 
 use crate::edge::Edge;
 use crate::node::Node;
-use tracing::debug;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::debug;
 
 /// ワークフローエラー
 #[derive(Debug, Error, PartialEq)]
@@ -135,9 +135,9 @@ impl Workflow {
         &self.end_edges
     }
 
-    /// 無視するエッジを取得
-    pub fn ignore_edges(&self) -> &HashSet<Arc<Edge>> {
-        &self.ignore_edges
+    /// エッジが無視されるか
+    pub(crate) fn is_ignored(&self, edge: &Arc<Edge>) -> bool {
+        self.ignore_edges.contains(edge)
     }
 
     /// 開始ノードを取得

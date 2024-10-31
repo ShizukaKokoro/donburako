@@ -120,7 +120,6 @@ impl Operator {
         #[cfg(feature = "dev")]
         tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
         self.containers.entry_by_exec_id(exec_id);
-        let ignore_cnt = self.workflows[&wf_id].ignore_edges().len();
         unimplemented!();
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
