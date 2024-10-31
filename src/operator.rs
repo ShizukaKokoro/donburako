@@ -65,10 +65,10 @@ impl ExecutableQueue {
 }
 
 #[derive(Debug)]
-struct StatusMap(HashMap<ExecutorId, WorkflowTx>);
+struct StatusMap(HashMap<ExecutorId, (WorkflowId, WorkflowTx)>);
 impl StatusMap {
-    fn start(&mut self, exec_id: ExecutorId, tx: WorkflowTx) {
-        let _ = self.0.insert(exec_id, tx);
+    fn start(&mut self, exec_id: ExecutorId, wf_id: WorkflowId, tx: WorkflowTx) {
+        let _ = self.0.insert(exec_id, (wf_id, tx));
     }
 }
 
@@ -132,7 +132,7 @@ impl Operator {
         let exec_id = ExecutorId::new();
         #[cfg(feature = "dev")]
         tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
-        self.status.start(exec_id, wf_tx);
+        self.status.start(exec_id, wf_id, wf_tx);
         self.containers.entry_by_exec_id(exec_id);
         for node in self.workflows[&wf_id].start_nodes() {
             self.queue.push(node.clone(), exec_id);
