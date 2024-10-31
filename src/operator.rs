@@ -77,6 +77,13 @@ impl StatusMap {
     fn get_workflow_id(&self, exec_id: &ExecutorId) -> Option<&WorkflowId> {
         self.0.get(exec_id).map(|(wf_id, _)| wf_id)
     }
+
+    #[tracing::instrument(skip(self))]
+    async fn end(&mut self, exec_id: ExecutorId) {
+        let (_, wf_tx) = self.0.remove(&exec_id).unwrap();
+        wf_tx.send(exec_id).await.unwrap();
+        debug!("Send end message");
+    }
 }
 
 /// オペレーター
@@ -262,6 +269,29 @@ impl Operator {
         self.exec_tx.send(ExecutorMessage::Update).await.unwrap();
     }
 
+    /// ワークフローの終了確認
+    ///
+    /// ワークフローが終了しているか確認する。
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    ///
+    /// # Returns
+    ///
+    /// 終了している場合は true
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn is_finished(&self, exec_id: ExecutorId) -> bool {
+        debug!("Check finished");
+        if let Some(wf_id) = self.status.get_workflow_id(&exec_id) {
+            let edges = self.workflows[wf_id].end_edges();
+            self.containers
+                .check_edges_exists_in_exec_id(exec_id, edges)
+        } else {
+            false
+        }
+    }
+
     /// ワークフローの強制終了
     ///
     /// # Arguments
@@ -269,7 +299,8 @@ impl Operator {
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
     pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
-        debug!("Finish workflow: {:?}", exec_id);
+        debug!("Finish workflow");
         self.containers.finish_containers(exec_id);
+        self.status.end(exec_id).await;
     }
 }

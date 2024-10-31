@@ -202,6 +202,28 @@ impl ContainerMap {
         self.0.contains_key(&exec_id) && self.0[&exec_id].get(&edge).unwrap_or(&None).is_some()
     }
 
+    /// 実行IDに対応するエッジが存在するか確認する
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_id` - 実行ID
+    /// * `edges` - エッジ
+    ///
+    /// # Returns
+    ///
+    /// 全て存在する場合は true、そうでない場合は false
+    pub(crate) fn check_edges_exists_in_exec_id(
+        &self,
+        exec_id: ExecutorId,
+        edges: &[Arc<Edge>],
+    ) -> bool {
+        if let Some(map) = self.0.get(&exec_id) {
+            edges.iter().all(|e| map.contains_key(e))
+        } else {
+            false
+        }
+    }
+
     /// コンテナの取得
     ///
     /// # Arguments
@@ -259,7 +281,6 @@ impl ContainerMap {
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
     pub(crate) fn finish_containers(&mut self, exec_id: ExecutorId) {
-        debug!("Finish containers with exec_id");
         if let Some(con_map) = self.0.get_mut(&exec_id) {
             for (_, container) in con_map.iter_mut() {
                 if let Some(mut container) = container.take() {

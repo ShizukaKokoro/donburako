@@ -67,14 +67,15 @@ impl<T> Handlers<T> {
         );
     }
 
-    fn remove(&mut self, key: usize) {
+    fn remove(&mut self, key: usize) -> ExecutorId {
         self.retains.push_back(key);
-        let _ = self.handles[key].take().unwrap();
+        let (_, exec_id) = self.handles[key].take().unwrap();
         #[cfg(feature = "dev")]
         debug!(
             "{:?} tasks are running(remove)",
             self.handles.len() - self.retains.len()
         );
+        exec_id
     }
 
     fn has_retain(&mut self) -> Option<usize> {
@@ -117,7 +118,10 @@ impl ProcessorBuilder {
                 info!("message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
-                        handlers.remove(key);
+                        let exec_id = handlers.remove(key);
+                        if op.lock().await.is_finished(exec_id) {
+                            info!("Finish workflow: {:?}", exec_id);
+                        }
                     }
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
@@ -150,6 +154,7 @@ impl ProcessorBuilder {
                     warn!("No retain");
                 }
             }
+            info!("Finish processor");
             Ok(())
         });
 
