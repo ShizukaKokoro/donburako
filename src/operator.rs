@@ -8,6 +8,7 @@ use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::task::spawn_blocking;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -138,6 +139,11 @@ impl Operator {
         }
         self.exec_tx.send(()).await.unwrap();
         exec_id
+    }
+
+    /// 次に実行するノードの取得
+    pub(crate) fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
+        self.queue.pop()
     }
 
     /// 新しいコンテナの追加

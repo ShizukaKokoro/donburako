@@ -4,6 +4,7 @@
 
 use crate::channel::{executor_channel, WorkflowTx};
 use crate::edge::Edge;
+use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
 use std::sync::Arc;
@@ -59,7 +60,7 @@ impl ProcessorBuilder {
     pub fn build(self, n: usize) -> Processor {
         debug!("Start building processor");
         let (exec_tx, mut exec_rx) = executor_channel(n);
-        let op = Arc::new(Mutex::new(Operator::new(exec_tx, self.workflow)));
+        let op = Arc::new(Mutex::new(Operator::new(exec_tx.clone(), self.workflow)));
         let op_clone = op.clone();
         debug!("End setting up processor: capacity={}", n);
 
@@ -70,6 +71,18 @@ impl ProcessorBuilder {
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
                 println!("message: {:?}", message);
+                if let Some((node, exec_id)) = op.lock().await.next_node() {
+                    let tx_clone = exec_tx.clone();
+                    let op_clone = op.clone();
+                    if node.is_blocking() {
+                        let rt_handle = Handle::current();
+                        spawn_blocking(move || {
+                            rt_handle.block_on(async { node.run(op_clone, exec_id).await })?;
+                            let _ = tx_clone.clone().send(());
+                            Ok::<&'static str, NodeError>(node.name())
+                        });
+                    }
+                }
             }
             Ok(())
         });
