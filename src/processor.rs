@@ -58,10 +58,11 @@ impl<T> Handlers<T> {
     }
 
     fn push(&mut self, key: usize, handle: JoinHandle<T>, exec_id: ExecutorId) {
+        assert_eq!(self.retains.pop_front().unwrap(), key);
         self.handles[key] = Some((handle, exec_id));
         #[cfg(feature = "dev")]
         debug!(
-            "{:?} tasks are running",
+            "{:?} tasks are running(push)",
             self.handles.len() - self.retains.len()
         );
     }
@@ -71,13 +72,13 @@ impl<T> Handlers<T> {
         let _ = self.handles[key].take().unwrap();
         #[cfg(feature = "dev")]
         debug!(
-            "{:?} tasks are running",
+            "{:?} tasks are running(remove)",
             self.handles.len() - self.retains.len()
         );
     }
 
     fn has_retain(&mut self) -> Option<usize> {
-        self.retains.pop_front()
+        self.retains.front().cloned()
     }
 }
 
@@ -113,7 +114,15 @@ impl ProcessorBuilder {
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
             while let Some(message) = exec_rx.recv().await {
-                println!("message: {:?}", message);
+                info!("message: {:?}", message);
+                match message {
+                    ExecutorMessage::Done(key) => {
+                        handlers.remove(key);
+                    }
+                    ExecutorMessage::Start => {}
+                    ExecutorMessage::Update => {}
+                }
+                println!("handlers: {:?}", handlers.retains);
                 if let Some(key) = handlers.has_retain() {
                     if let Some((node, exec_id)) = op.lock().await.next_node() {
                         let tx_clone = exec_tx.clone();
