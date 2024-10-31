@@ -84,6 +84,10 @@ impl StatusMap {
         wf_tx.send(exec_id).await.unwrap();
         debug!("Send end message");
     }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// オペレーター
@@ -308,5 +312,10 @@ impl Operator {
     pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
         debug!("Finish workflow");
         self.containers.finish_containers(exec_id);
+    }
+
+    /// ワークフローが全て終了しているか確認
+    pub fn is_all_finished(&self) -> bool {
+        self.status.is_empty()
     }
 }

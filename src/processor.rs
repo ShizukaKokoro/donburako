@@ -121,6 +121,9 @@ impl ProcessorBuilder {
                         let exec_id = handlers.remove(key);
                         if op.lock().await.is_finished(exec_id).await {
                             info!("Finish workflow: {:?}", exec_id);
+                            if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
+                                break;
+                            }
                         }
                     }
                     ExecutorMessage::Start => {}
