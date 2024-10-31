@@ -247,11 +247,17 @@ impl Operator {
         exec_id: ExecutorId,
         container: VecDeque<Container>,
     ) -> Result<(), OperatorError> {
+        let wf_id = {
+            if let Some(wf_id) = self.status.get_workflow_id(&exec_id) {
+                wf_id
+            } else {
+                for mut c in container {
+                    c.take_anyway();
+                }
+                return Err(OperatorError::NotRunning(exec_id));
+            }
+        };
         debug!("Add container: {:?}", container);
-        let wf_id = self
-            .status
-            .get_workflow_id(&exec_id)
-            .ok_or(OperatorError::NotRunning(exec_id))?;
         for (e, mut c) in edges.iter().zip(container) {
             if self.workflows[wf_id].is_ignored(e) {
                 debug!("Ignore edge");
