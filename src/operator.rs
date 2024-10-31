@@ -47,10 +47,13 @@ struct ExecutableQueue {
 impl ExecutableQueue {
     /// 新しい実行可能なノードのキューの生成
     #[tracing::instrument(skip(self))]
-    fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) {
+    fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) -> bool {
         debug!("Push node");
         if self.set.insert((node.clone(), exec_id)) {
             self.queue.push_back((node.clone(), exec_id));
+            true
+        } else {
+            false
         }
     }
 
@@ -153,10 +156,13 @@ impl Operator {
         tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
         self.status.start(exec_id, wf_id, wf_tx);
         self.containers.entry_by_exec_id(exec_id);
+        let mut flag = false;
         for node in self.workflows[&wf_id].start_nodes() {
-            self.queue.push(node.clone(), exec_id);
+            flag |= self.queue.push(node.clone(), exec_id);
         }
-        self.exec_tx.send(ExecutorMessage::Start).unwrap();
+        if flag {
+            self.exec_tx.send(ExecutorMessage::Start).unwrap();
+        }
         exec_id
     }
 
@@ -287,8 +293,7 @@ impl Operator {
             let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
             if let Some(node) = self.workflows[wf_id].get_node(e) {
                 if self.containers.is_ready(&node, exec_id) {
-                    self.queue.push(node, exec_id);
-                    flag = true;
+                    flag |= self.queue.push(node, exec_id);
                 }
             }
         }
