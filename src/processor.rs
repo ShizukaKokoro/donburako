@@ -7,11 +7,11 @@ use crate::edge::Edge;
 use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
-use tokio::task::{spawn, spawn_blocking, JoinHandle};
+use tokio::task::{spawn, spawn_blocking, JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, trace, warn};
 
@@ -39,6 +39,46 @@ pub enum ProcessorError {
     NotFinishedEdge,
 }
 
+type Handler<T> = (JoinHandle<T>, ExecutorId);
+
+/// ハンドラ管理
+struct Handlers<T> {
+    handles: Vec<Option<Handler<T>>>,
+    retains: VecDeque<usize>,
+}
+impl<T> Handlers<T> {
+    fn new(n: usize) -> Self {
+        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
+        let mut retains = VecDeque::new();
+        for i in 0..n {
+            retains.push_back(i);
+            handles.push(None);
+        }
+        Self { handles, retains }
+    }
+
+    fn push(&mut self, handle: JoinHandle<T>, exec_id: ExecutorId) {
+        if let Some(retain) = self.retains.pop_front() {
+            self.handles[retain] = Some((handle, exec_id));
+            #[cfg(feature = "dev")]
+            debug!(
+                "{:?} tasks are running",
+                self.handles.len() - self.retains.len()
+            );
+        }
+    }
+
+    fn remove(&mut self, key: usize) {
+        self.retains.push_back(key);
+        let _ = self.handles[key].take().unwrap();
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running",
+            self.handles.len() - self.retains.len()
+        );
+    }
+}
+
 /// プロセッサービルダー
 #[derive(Default)]
 pub struct ProcessorBuilder {
@@ -62,6 +102,7 @@ impl ProcessorBuilder {
         let (exec_tx, mut exec_rx) = executor_channel(n);
         let op = Arc::new(Mutex::new(Operator::new(exec_tx.clone(), self.workflow)));
         let op_clone = op.clone();
+        let mut handlers: Handlers<Result<_, NodeError>> = Handlers::new(n);
         debug!("End setting up processor: capacity={}", n);
 
         let cancel = CancellationToken::new();
@@ -74,14 +115,24 @@ impl ProcessorBuilder {
                 if let Some((node, exec_id)) = op.lock().await.next_node() {
                     let tx_clone = exec_tx.clone();
                     let op_clone = op.clone();
-                    if node.is_blocking() {
+                    let handle = if node.is_blocking() {
                         let rt_handle = Handle::current();
                         spawn_blocking(move || {
-                            rt_handle.block_on(async { node.run(op_clone, exec_id).await })?;
-                            let _ = tx_clone.send(());
-                            Ok::<&'static str, NodeError>(node.name())
-                        });
-                    }
+                            rt_handle.block_on(async {
+                                let result = node.run(op_clone, exec_id).await;
+                                let _ = tx_clone.send(()).await;
+                                result
+                            })?;
+                            Ok(node.name())
+                        })
+                    } else {
+                        spawn(async move {
+                            node.run(op_clone, exec_id).await?;
+                            let _ = tx_clone.send(()).await;
+                            Ok(node.name())
+                        })
+                    };
+                    handlers.push(handle, exec_id);
                 }
             }
             Ok(())
