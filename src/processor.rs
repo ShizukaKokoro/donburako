@@ -10,10 +10,12 @@ use crate::workflow::{WorkflowBuilder, WorkflowId};
 use std::{collections::VecDeque, sync::Arc};
 use thiserror::Error;
 use tokio::runtime::Handle;
+use tokio::select;
 use tokio::sync::Mutex;
-use tokio::task::{spawn, spawn_blocking, JoinError, JoinHandle};
+use tokio::task::{spawn, spawn_blocking, JoinHandle};
+use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info, warn};
 
 /// プロセッサーエラー
 #[derive(Debug, Error)]
@@ -114,7 +116,11 @@ impl ProcessorBuilder {
         let shutdown_token = CancellationToken::new();
         let shutdown_clone = shutdown_token.clone();
         let handle = spawn(async move {
-            while let Some(message) = exec_rx.recv().await {
+            while let Some(message) = select! {
+            message = exec_rx.recv() => message,
+            _ = cancel_clone.cancelled() => None,
+            _ = sleep(Duration::from_millis(100)) => Some(ExecutorMessage::Check),
+            } {
                 debug!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
@@ -128,6 +134,11 @@ impl ProcessorBuilder {
                     }
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
+                    ExecutorMessage::Check => {
+                        if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
+                            break;
+                        }
+                    }
                 }
                 if let Some(key) = handlers.has_retain() {
                     if let Some((node, exec_id)) = op.lock().await.next_node() {

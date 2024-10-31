@@ -56,6 +56,8 @@ pub(crate) enum ExecutorMessage {
     ///
     /// * `key` - ハンドラーのキー
     Done(usize),
+    /// 定期的な確認
+    Check,
 }
 
 /// ノードの送信側
