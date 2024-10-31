@@ -151,7 +151,7 @@ impl ProcessorBuilder {
                     ExecutorMessage::Done(key) => {
                         let exec_id = handlers.remove(key);
                         if op.lock().await.is_finished(exec_id).await {
-                            info!("Finish workflow: {:?}", exec_id);
+                            debug!("Finish workflow: {:?}", exec_id);
                             if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
                                 break;
                             }
@@ -189,7 +189,7 @@ impl ProcessorBuilder {
                         handlers.push(key, handle, exec_id);
                     }
                 } else {
-                    warn!("No retain");
+                    debug!("No retain");
                 }
             }
             info!("Finish processor");

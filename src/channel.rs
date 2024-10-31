@@ -8,7 +8,7 @@ use tokio::sync::mpsc::{
     error::{SendError, TrySendError},
     Receiver, Sender,
 };
-use tracing::{debug, warn};
+use tracing::debug;
 
 type WfMessage = ExecutorId;
 
@@ -77,7 +77,7 @@ impl ExecutorTx {
             Ok(_) => Ok(()),
             Err(TrySendError::Closed(message)) => Err(TrySendError::Closed(message)),
             Err(TrySendError::Full(message)) => {
-                warn!(
+                debug!(
                     "Failed to send message because the channel is full: {:?}",
                     message
                 );
