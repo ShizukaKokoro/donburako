@@ -83,6 +83,19 @@ impl<T> Handlers<T> {
     fn has_retain(&mut self) -> Option<usize> {
         self.retains.front().cloned()
     }
+
+    async fn check_handles(&mut self) -> Vec<ExecutorId> {
+        let mut finished = Vec::new();
+        for (handle, exec_id) in self.handles.iter_mut().filter_map(|h| h.as_mut()) {
+            if handle.is_finished() {
+                if let Err(e) = handle.await {
+                    warn!("Handle error: {:?}", e);
+                    finished.push(*exec_id);
+                }
+            }
+        }
+        finished
+    }
 }
 
 /// プロセッサービルダー
@@ -166,9 +179,14 @@ impl ProcessorBuilder {
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
                     ExecutorMessage::Check => {
-                        if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
+                        let mut op_lock = op.lock().await;
+                        for finished in handlers.check_handles().await {
+                            op_lock.finish_workflow_by_execute_id(finished).await;
+                        }
+                        if shutdown_clone.is_cancelled() && op_lock.is_all_finished() {
                             break;
                         }
+                        drop(op_lock);
                     }
                 }
                 #[cfg(feature = "dev")]
@@ -299,6 +317,6 @@ impl Processor {
     /// プロセッサーの待機
     pub async fn wait(self) -> Result<(), ProcessorError> {
         info!("Wait processor");
-        self.handle.await.unwrap()
+        self.handle.await?
     }
 }
