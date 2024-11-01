@@ -31,8 +31,8 @@ pub enum NodeError {
     RunningError(#[from] crate::operator::OperatorError),
 
     /// 実行中の任意のエラー
-    #[error("Error while running the node ({0})")]
-    AnyError(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error("Error while running the node")]
+    AnyError,
 }
 
 /// ノードID
