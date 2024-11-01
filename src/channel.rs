@@ -68,12 +68,14 @@ pub(crate) struct ExecutorTx {
 impl ExecutorTx {
     /// 送信
     pub fn send(&self, message: ExecutorMessage) -> Result<(), TrySendError<ExecutorMessage>> {
+        #[cfg(feature = "dev")]
+        let start = std::time::Instant::now();
         debug!(
             "Send message: {:?} (capacity: {})",
             message,
             self.tx.capacity()
         );
-        match self.tx.try_send(message) {
+        let result = match self.tx.try_send(message) {
             Ok(_) => Ok(()),
             Err(TrySendError::Closed(message)) => Err(TrySendError::Closed(message)),
             Err(TrySendError::Full(message)) => {
@@ -83,7 +85,14 @@ impl ExecutorTx {
                 );
                 Ok(())
             }
-        }
+        };
+        #[cfg(feature = "dev")]
+        debug!(
+            "Send message: {:?} (elapsed: {:?})",
+            result,
+            start.elapsed()
+        );
+        result
     }
 }
 
