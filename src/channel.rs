@@ -97,7 +97,16 @@ impl ExecutorRx {
     ///
     /// 全ての [`ExecutorTx`] がドロップすると、`None` が返る。
     pub async fn recv(&mut self) -> Option<ExecutorMessage> {
-        self.rx.recv().await
+        #[cfg(feature = "dev")]
+        let start = std::time::Instant::now();
+        let result = self.rx.recv().await;
+        #[cfg(feature = "dev")]
+        debug!(
+            "Receive message: {:?} (elapsed: {:?})",
+            result,
+            start.elapsed()
+        );
+        result
     }
 }
 

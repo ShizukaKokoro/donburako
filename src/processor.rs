@@ -148,6 +148,8 @@ impl ProcessorBuilder {
             _ = cancel_clone.cancelled() => None,
             _ = sleep(Duration::from_millis(100)) => Some(ExecutorMessage::Check),
             } {
+                #[cfg(feature = "dev")]
+                debug!("Start loop: {:?}", start.elapsed());
                 debug!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
@@ -169,6 +171,8 @@ impl ProcessorBuilder {
                         }
                     }
                 }
+                #[cfg(feature = "dev")]
+                debug!("Processing : {:?}", start.elapsed());
                 if let Some(key) = handlers.has_retain() {
                     if let Some((node, exec_id)) = op.lock().await.next_node() {
                         let tx_clone = exec_tx.clone();

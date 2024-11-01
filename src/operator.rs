@@ -369,6 +369,7 @@ impl Operator {
     }
 
     #[cfg(feature = "dev")]
+    #[tracing::instrument(skip(self))]
     fn check_timer(&self, exec_id: &ExecutorId) {
         if let Some(start) = self.timer.get(exec_id) {
             tracing::debug!("{:?} is at {:?}", exec_id, start.elapsed());
@@ -376,6 +377,7 @@ impl Operator {
     }
 
     #[cfg(feature = "dev")]
+    #[tracing::instrument(skip(self))]
     pub(crate) fn stop_timer(&mut self, exec_id: &ExecutorId) {
         if let Some(start) = self.timer.remove(exec_id) {
             let end = std::time::Instant::now();
