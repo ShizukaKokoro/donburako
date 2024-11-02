@@ -106,7 +106,10 @@ impl ProcessorBuilder {
             _ = sleep(Duration::from_millis(100)) => Some(ExecutorMessage::Check),
             } {
                 #[cfg(feature = "dev")]
-                debug!("Start loop: {:?}", start.elapsed());
+                {
+                    debug!("Start loop: {:?}", start.elapsed());
+                    debug!("{} tasks is running", op.lock().await.running_tasks());
+                }
                 debug!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {

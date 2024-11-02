@@ -538,4 +538,10 @@ impl Operator {
             tracing::info!("{:?} is finished in {:?}", exec_id, duration);
         }
     }
+
+    #[cfg(feature = "dev")]
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn running_tasks(&self) -> usize {
+        self.handlers.handles.len() - self.handlers.retains.len()
+    }
 }
