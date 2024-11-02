@@ -4,15 +4,13 @@
 
 use crate::channel::{executor_channel, ExecutorMessage, WorkflowTx};
 use crate::edge::Edge;
-use crate::node::NodeError;
 use crate::operator::{ExecutorId, Operator};
 use crate::workflow::{WorkflowBuilder, WorkflowId};
-use std::{collections::VecDeque, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
-use tokio::runtime::Handle;
 use tokio::select;
 use tokio::sync::Mutex;
-use tokio::task::{spawn, spawn_blocking, JoinHandle};
+use tokio::task::{spawn, JoinHandle};
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -39,67 +37,6 @@ pub enum ProcessorError {
     /// まだ終了していないエッジを取得しようとした
     #[error("Not finished edge")]
     NotFinishedEdge,
-}
-
-type Handler<T> = (JoinHandle<T>, ExecutorId);
-
-/// ハンドラ管理
-struct Handlers<T> {
-    handles: Vec<Option<Handler<T>>>,
-    retains: VecDeque<usize>,
-}
-impl<T> Handlers<T> {
-    fn new(n: usize) -> Self {
-        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
-        let mut retains = VecDeque::new();
-        for i in 0..n {
-            retains.push_back(i);
-            handles.push(None);
-        }
-        Self { handles, retains }
-    }
-
-    fn push(&mut self, key: usize, handle: JoinHandle<T>, exec_id: ExecutorId) {
-        assert_eq!(self.retains.pop_front().unwrap(), key);
-        self.handles[key] = Some((handle, exec_id));
-        #[cfg(feature = "dev")]
-        debug!(
-            "{:?} tasks are running(push)",
-            self.handles.len() - self.retains.len()
-        );
-    }
-
-    fn remove(&mut self, key: usize) -> ExecutorId {
-        self.retains.push_back(key);
-        let (_, exec_id) = self.handles[key].take().unwrap();
-        #[cfg(feature = "dev")]
-        debug!(
-            "{:?} tasks are running(remove)",
-            self.handles.len() - self.retains.len()
-        );
-        exec_id
-    }
-
-    fn has_retain(&mut self) -> Option<usize> {
-        self.retains.front().cloned()
-    }
-
-    async fn check_handles(&mut self) -> Vec<ExecutorId> {
-        let mut finished = Vec::new();
-        for handle in self.handles.iter_mut() {
-            if let Some((h, exec_id)) = handle.take() {
-                if h.is_finished() {
-                    if let Err(e) = h.await {
-                        warn!("Handle error: {:?} ({:?})", e, exec_id);
-                        finished.push(exec_id);
-                    }
-                } else {
-                    assert!(handle.replace((h, exec_id)).is_none());
-                }
-            }
-        }
-        finished
-    }
 }
 
 /// プロセッサービルダー
@@ -148,9 +85,12 @@ impl ProcessorBuilder {
     pub fn build(self, handler_num: usize) -> Processor {
         debug!("Start building processor");
         let (exec_tx, mut exec_rx) = executor_channel(self.capacity);
-        let op = Arc::new(Mutex::new(Operator::new(exec_tx.clone(), self.workflow)));
+        let op = Arc::new(Mutex::new(Operator::new(
+            exec_tx.clone(),
+            self.workflow,
+            handler_num,
+        )));
         let op_clone = op.clone();
-        let mut handlers: Handlers<Result<_, NodeError>> = Handlers::new(handler_num);
         debug!("End setting up processor",);
 
         let cancel = CancellationToken::new();
@@ -170,57 +110,28 @@ impl ProcessorBuilder {
                 debug!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
-                        let exec_id = handlers.remove(key);
-                        if op.lock().await.is_finished(exec_id).await {
-                            #[cfg(feature = "dev")]
-                            op.lock().await.stop_timer(&exec_id);
-                            debug!("Finish workflow: {:?}", exec_id);
-                            if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
-                                break;
-                            }
+                        if op.lock().await.finish_node(key).await
+                            && shutdown_clone.is_cancelled()
+                            && op.lock().await.is_all_finished()
+                        {
+                            break;
                         }
                     }
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
                     ExecutorMessage::Check => {
-                        let mut op_lock = op.lock().await;
-                        for finished in handlers.check_handles().await {
-                            op_lock.finish_workflow_by_execute_id(finished).await;
-                        }
-                        if shutdown_clone.is_cancelled() && op_lock.is_all_finished() {
+                        if op.lock().await.check_handles().await
+                            && shutdown_clone.is_cancelled()
+                            && op.lock().await.is_all_finished()
+                        {
                             break;
                         }
-                        drop(op_lock);
                     }
                 }
                 #[cfg(feature = "dev")]
                 debug!("Processing : {:?}", start.elapsed());
-                if let Some(key) = handlers.has_retain() {
-                    if let Some((node, exec_id)) = op.lock().await.next_node() {
-                        let tx_clone = exec_tx.clone();
-                        let op_clone = op.clone();
-                        let handle = if node.is_blocking() {
-                            let rt_handle = Handle::current();
-                            spawn_blocking(move || {
-                                rt_handle.block_on(async {
-                                    let result = node.run(op_clone, exec_id).await;
-                                    let _ = tx_clone.send(ExecutorMessage::Done(key));
-                                    result
-                                })?;
-                                Ok(node.name())
-                            })
-                        } else {
-                            spawn(async move {
-                                node.run(op_clone, exec_id).await?;
-                                let _ = tx_clone.send(ExecutorMessage::Done(key));
-                                Ok(node.name())
-                            })
-                        };
-                        handlers.push(key, handle, exec_id);
-                    }
-                } else {
-                    debug!("No retain");
-                }
+                let op_clone = op.clone();
+                op.lock().await.process(&exec_tx, &op_clone).await;
                 #[cfg(feature = "dev")]
                 {
                     debug!("Elapsed time: {:?}", start.elapsed());

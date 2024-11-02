@@ -3,11 +3,14 @@
 use crate::channel::{ExecutorMessage, ExecutorTx, WorkflowTx};
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
-use crate::node::Node;
+use crate::node::{Node, NodeError};
 use crate::workflow::{Workflow, WorkflowBuilder, WorkflowId};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::runtime::Handle;
+use tokio::task::{spawn, spawn_blocking, JoinHandle};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -94,6 +97,60 @@ impl StatusMap {
     }
 }
 
+type Handler<T> = (JoinHandle<T>, ExecutorId);
+
+/// ハンドラ管理
+#[derive(Debug)]
+struct Handlers<T: Debug> {
+    handles: Vec<Option<Handler<T>>>,
+    retains: VecDeque<usize>,
+}
+impl<T: Debug> Handlers<T> {
+    fn new(n: usize) -> Self {
+        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
+        let mut retains = VecDeque::new();
+        for i in 0..n {
+            retains.push_back(i);
+            handles.push(None);
+        }
+        Self { handles, retains }
+    }
+
+    #[tracing::instrument(skip(self, handle))]
+    fn push(&mut self, key: usize, handle: JoinHandle<T>, exec_id: ExecutorId) {
+        assert_eq!(self.retains.pop_front().unwrap(), key);
+        self.handles[key] = Some((handle, exec_id));
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running(push)",
+            self.handles.len() - self.retains.len()
+        );
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn remove(&mut self, key: usize) -> ExecutorId {
+        self.retains.push_back(key);
+        let (handle, exec_id) = self.handles[key].take().unwrap();
+        let name = handle.await.unwrap();
+        debug!("Finish node: {:?}", name);
+        #[cfg(feature = "dev")]
+        debug!(
+            "{:?} tasks are running(remove)",
+            self.handles.len() - self.retains.len()
+        );
+        exec_id
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn has_retain(&mut self) -> Option<usize> {
+        self.retains.front().cloned()
+    }
+
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<Handler<T>>> {
+        self.handles.iter_mut()
+    }
+}
+
 /// オペレーター
 ///
 /// コンテナと実行IDごとのワークフローの状態を管理する。
@@ -102,6 +159,7 @@ pub struct Operator {
     exec_tx: ExecutorTx,
     workflows: HashMap<WorkflowId, Workflow>,
     status: StatusMap,
+    handlers: Handlers<Result<&'static str, NodeError>>,
     containers: ContainerMap,
     queue: ExecutableQueue,
     #[cfg(feature = "dev")]
@@ -112,8 +170,14 @@ impl Operator {
     ///
     /// # Arguments
     ///
+    /// * `exec_tx` - エグゼキューターの送信チャンネル
     /// * `builders` - ワークフロービルダーのリスト
-    pub(crate) fn new(exec_tx: ExecutorTx, builders: Vec<(WorkflowId, WorkflowBuilder)>) -> Self {
+    /// * `handler_num` - 一度に実行されるハンドラーの数
+    pub(crate) fn new(
+        exec_tx: ExecutorTx,
+        builders: Vec<(WorkflowId, WorkflowBuilder)>,
+        handler_num: usize,
+    ) -> Self {
         let mut workflows = HashMap::new();
         for (id, builder) in builders {
             let _ = workflows.insert(id, builder.build());
@@ -124,6 +188,7 @@ impl Operator {
             status: StatusMap(HashMap::new()),
             containers: ContainerMap::default(),
             queue: ExecutableQueue::default(),
+            handlers: Handlers::new(handler_num),
             #[cfg(feature = "dev")]
             timer: HashMap::new(),
         }
@@ -154,6 +219,7 @@ impl Operator {
     /// # Returns
     ///
     /// 実行ID
+    #[tracing::instrument(skip(self))]
     pub async fn start_workflow(&mut self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
         let exec_id = ExecutorId::new();
         #[cfg(feature = "dev")]
@@ -173,8 +239,48 @@ impl Operator {
         exec_id
     }
 
+    /// ノードの実行処理
+    ///
+    /// # Arguments
+    ///
+    /// * `exec_tx` - エグゼキューターの送信チャンネル
+    /// * `op` - オペレーター
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn process(
+        &mut self,
+        exec_tx: &ExecutorTx,
+        op: &Arc<tokio::sync::Mutex<Self>>,
+    ) {
+        if let Some(key) = self.handlers.has_retain() {
+            if let Some((node, exec_id)) = self.next_node() {
+                let tx_clone = exec_tx.clone();
+                let op_clone = op.clone();
+                let handle = if node.is_blocking() {
+                    let rt_handle = Handle::current();
+                    spawn_blocking(move || {
+                        rt_handle.block_on(async {
+                            let result = node.run(op_clone, exec_id).await;
+                            let _ = tx_clone.send(ExecutorMessage::Done(key));
+                            result
+                        })?;
+                        Ok(node.name())
+                    })
+                } else {
+                    spawn(async move {
+                        node.run(op_clone, exec_id).await?;
+                        let _ = tx_clone.send(ExecutorMessage::Done(key));
+                        Ok(node.name())
+                    })
+                };
+                self.handlers.push(key, handle, exec_id);
+            }
+        } else {
+            debug!("No retain");
+        }
+    }
+
     /// 次に実行するノードの取得
-    pub(crate) fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
+    pub fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
         if let Some((node, exec_id)) = self.queue.pop() {
             #[cfg(feature = "dev")]
             self.check_timer(&exec_id);
@@ -299,7 +405,7 @@ impl Operator {
     /// * `edges` - エッジ
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
-    pub async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
+    async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
         debug!("Check executable nodes");
         let mut flag = false;
         for e in edges {
@@ -329,7 +435,7 @@ impl Operator {
     ///
     /// 終了している場合は true
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn is_finished(&mut self, exec_id: ExecutorId) -> bool {
+    async fn is_finished(&mut self, exec_id: ExecutorId) -> bool {
         debug!("Check finished");
         if let Some(wf_id) = self.status.get_workflow_id(&exec_id) {
             let edges = self.workflows[wf_id].end_edges();
@@ -347,6 +453,57 @@ impl Operator {
         }
     }
 
+    /// ノードの終了プロセス
+    ///
+    /// ノードの終了処理を行う。
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - ハンドラーのキー
+    ///
+    /// # Returns
+    ///
+    /// ワークフローが終了している場合は true
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn finish_node(&mut self, key: usize) -> bool {
+        let exec_id = self.handlers.remove(key).await;
+        if self.is_finished(exec_id).await {
+            #[cfg(feature = "dev")]
+            self.stop_timer(&exec_id);
+            debug!("Finish workflow: {:?}", exec_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// ハンドルの定期確認
+    ///
+    /// ハンドルの状態を確認し、終了しているハンドルの実行を終了する。
+    ///
+    /// # Returns
+    ///
+    /// ワークフローが終了している場合は true
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn check_handles(&mut self) -> bool {
+        let mut flag = false;
+        for handle in self.handlers.iter_mut() {
+            if let Some((h, exec_id)) = handle.take() {
+                if h.is_finished() {
+                    if let Err(e) = h.await {
+                        warn!("Handle error: {:?} ({:?})", e, exec_id);
+                        self.containers.finish_containers(exec_id);
+                        self.status.end(exec_id).await;
+                        flag = true;
+                    }
+                } else {
+                    assert!(handle.replace((h, exec_id)).is_none());
+                }
+            }
+        }
+        flag
+    }
+
     /// ワークフローの強制終了
     ///
     /// # Arguments
@@ -360,7 +517,7 @@ impl Operator {
     }
 
     /// ワークフローが全て終了しているか確認
-    pub fn is_all_finished(&self) -> bool {
+    pub(crate) fn is_all_finished(&self) -> bool {
         self.status.is_empty()
     }
 
