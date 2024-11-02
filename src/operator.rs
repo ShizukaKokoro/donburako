@@ -246,14 +246,10 @@ impl Operator {
     /// * `exec_tx` - エグゼキューターの送信チャンネル
     /// * `op` - オペレーター
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn process(
-        &mut self,
-        exec_tx: &ExecutorTx,
-        op: &Arc<tokio::sync::Mutex<Self>>,
-    ) {
+    pub(crate) async fn process(&mut self, op: &Arc<tokio::sync::Mutex<Self>>) {
         if let Some(key) = self.handlers.has_retain() {
             if let Some((node, exec_id)) = self.next_node() {
-                let tx_clone = exec_tx.clone();
+                let tx_clone = self.exec_tx.clone();
                 let op_clone = op.clone();
                 let handle = if node.is_blocking() {
                     let rt_handle = Handle::current();

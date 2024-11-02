@@ -131,7 +131,7 @@ impl ProcessorBuilder {
                 #[cfg(feature = "dev")]
                 debug!("Processing : {:?}", start.elapsed());
                 let op_clone = op.clone();
-                op.lock().await.process(&exec_tx, &op_clone).await;
+                op.lock().await.process(&op_clone).await;
                 #[cfg(feature = "dev")]
                 {
                     debug!("Elapsed time: {:?}", start.elapsed());
