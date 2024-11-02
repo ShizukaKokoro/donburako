@@ -19,8 +19,15 @@ pub struct WorkflowTx {
 }
 impl WorkflowTx {
     /// 送信
+    #[tracing::instrument(skip(self))]
     pub async fn send(&self, message: WfMessage) -> Result<(), SendError<WfMessage>> {
         self.tx.send(message).await
+    }
+}
+#[cfg(feature = "dev")]
+impl Drop for WorkflowTx {
+    fn drop(&mut self) {
+        debug!("Drop WorkflowTx");
     }
 }
 
@@ -33,8 +40,18 @@ impl WorkflowRx {
     /// 受信待ち
     ///
     /// 全ての [`WorkflowTx`] がドロップすると、`None` が返る。
+    #[tracing::instrument(skip(self))]
     pub async fn recv(&mut self) -> Option<WfMessage> {
-        self.rx.recv().await
+        debug!("Wait received message");
+        let result = self.rx.recv().await;
+        debug!("Received message: {:?}", result);
+        result
+    }
+}
+#[cfg(feature = "dev")]
+impl Drop for WorkflowRx {
+    fn drop(&mut self) {
+        debug!("Drop WorkflowRx");
     }
 }
 
@@ -67,6 +84,7 @@ pub(crate) struct ExecutorTx {
 }
 impl ExecutorTx {
     /// 送信
+    #[tracing::instrument(skip(self))]
     pub fn send(&self, message: ExecutorMessage) -> Result<(), TrySendError<ExecutorMessage>> {
         #[cfg(feature = "dev")]
         let start = std::time::Instant::now();
@@ -95,6 +113,12 @@ impl ExecutorTx {
         result
     }
 }
+#[cfg(feature = "dev")]
+impl Drop for ExecutorTx {
+    fn drop(&mut self) {
+        debug!("Drop ExecutorTx");
+    }
+}
 
 /// ノードの受信側
 #[derive(Debug)]
@@ -105,6 +129,7 @@ impl ExecutorRx {
     /// 受信待ち
     ///
     /// 全ての [`ExecutorTx`] がドロップすると、`None` が返る。
+    #[tracing::instrument(skip(self))]
     pub async fn recv(&mut self) -> Option<ExecutorMessage> {
         #[cfg(feature = "dev")]
         let start = std::time::Instant::now();
@@ -116,6 +141,12 @@ impl ExecutorRx {
             start.elapsed()
         );
         result
+    }
+}
+#[cfg(feature = "dev")]
+impl Drop for ExecutorRx {
+    fn drop(&mut self) {
+        debug!("Drop ExecutorRx");
     }
 }
 
