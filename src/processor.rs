@@ -86,11 +86,15 @@ impl<T> Handlers<T> {
 
     async fn check_handles(&mut self) -> Vec<ExecutorId> {
         let mut finished = Vec::new();
-        for (handle, exec_id) in self.handles.iter_mut().filter_map(|h| h.as_mut()) {
-            if handle.is_finished() {
-                if let Err(e) = handle.await {
-                    warn!("Handle error: {:?}", e);
-                    finished.push(*exec_id);
+        for handle in self.handles.iter_mut() {
+            if let Some((h, exec_id)) = handle.take() {
+                if h.is_finished() {
+                    if let Err(e) = h.await {
+                        warn!("Handle error: {:?} ({:?})", e, exec_id);
+                        finished.push(exec_id);
+                    }
+                } else {
+                    assert!(handle.replace((h, exec_id)).is_none());
                 }
             }
         }
