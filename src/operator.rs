@@ -311,8 +311,9 @@ impl Operator {
                     })
                 } else {
                     spawn(async move {
-                        node.run(op_clone, exec_id).await?;
+                        let result = node.run(op_clone, exec_id).await;
                         let _ = tx_clone.send(ExecutorMessage::Done(key));
+                        result?;
                         Ok(node.name())
                     })
                 };
