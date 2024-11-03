@@ -498,6 +498,7 @@ impl Operator {
                 .containers
                 .check_edges_exists_in_exec_id(exec_id, edges)
             {
+                debug!("The workflow is finished");
                 self.status.end(exec_id, true).await; // TODO: ほんとに true?
                 true
             } else {
