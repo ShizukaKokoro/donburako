@@ -11,7 +11,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::task::{spawn, spawn_blocking, JoinHandle};
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use uuid::Uuid;
 
 /// オペレーターエラー
@@ -494,7 +494,7 @@ impl Operator {
                 false
             }
         } else {
-            false
+            true
         }
     }
 
@@ -563,6 +563,10 @@ impl Operator {
 
     /// ワークフローが全て終了しているか確認
     pub(crate) fn is_all_finished(&self) -> bool {
+        #[cfg(feature = "dev")]
+        {
+            trace!("Check all finished {:?}", self.status);
+        }
         self.status.is_empty()
     }
 
