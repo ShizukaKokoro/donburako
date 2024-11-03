@@ -109,6 +109,10 @@ impl StatusMap {
         }
     }
 
+    fn is_running(&self, exec_id: &ExecutorId) -> bool {
+        self.0.contains_key(exec_id)
+    }
+
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -343,6 +347,9 @@ impl Operator {
     pub fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
         while !self.queue.is_empty() {
             if let Some((node, exec_id)) = self.queue.pop() {
+                if !self.status.is_running(&exec_id) {
+                    continue;
+                }
                 #[cfg(feature = "dev")]
                 self.check_timer(&exec_id);
                 return Some((node, exec_id));
