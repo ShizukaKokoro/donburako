@@ -396,6 +396,9 @@ impl Operator {
         }
         trace!("Get container");
         let mut containers = VecDeque::new();
+        if edge.is_empty() {
+            return Ok(containers);
+        }
         for e in edge {
             if let Some(container) = self.containers.get_container(e.clone(), exec_id) {
                 containers.push_back(container);
