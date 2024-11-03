@@ -82,9 +82,6 @@ impl WorkflowBuilder {
                 let _ = input_edges.insert(input.clone());
             }
             for output in node.outputs() {
-                if self.ignored_edges.contains(output) {
-                    continue;
-                }
                 let _ = all_edges.insert(output.clone());
                 let _ = output_edges.insert(output.clone());
             }
@@ -92,6 +89,8 @@ impl WorkflowBuilder {
 
         let start_edges = all_edges.difference(&output_edges).cloned().collect();
         let end_edges = all_edges.difference(&input_edges).cloned().collect();
+        debug!("start_edges: {:?}", start_edges);
+        debug!("end_edges: {:?}", end_edges);
         Workflow {
             input_to_node,
             start_edges,

@@ -274,6 +274,22 @@ impl ContainerMap {
         Ok(())
     }
 
+    /// 空の枠の追加
+    ///
+    /// 無視されるエッジに対して、実行完了を示すための空の枠を追加する。
+    /// 通常のコンテナだと、データを取得されないためデータが中に残ってしまうが、何も格納しないとノードが終了したのかどうかがわからない。
+    ///
+    /// # Arguments
+    ///
+    /// * `edge` - エッジ
+    /// * `exec_id` - 実行ID
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn add_empty(&mut self, edge: Arc<Edge>, exec_id: ExecutorId) {
+        if let Some(map) = self.0.get_mut(&exec_id) {
+            let _ = map.insert(edge, None);
+        }
+    }
+
     /// 特定の実行IDに対応するコンテナを全て終了処理する
     ///
     /// # Arguments

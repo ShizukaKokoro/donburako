@@ -441,6 +441,7 @@ impl Operator {
         for (e, mut c) in edges.iter().zip(container) {
             if self.workflows[wf_id].is_ignored(e) {
                 trace!("Ignore edge");
+                self.containers.add_empty(e.clone(), exec_id);
                 c.take_anyway();
                 continue;
             } else {
