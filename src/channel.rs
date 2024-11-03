@@ -10,7 +10,15 @@ use tokio::sync::mpsc::{
 };
 use tracing::debug;
 
-type WfMessage = ExecutorId;
+/// ワークフローのメッセージ
+#[derive(Debug)]
+pub enum WfMessage {
+    /// 正常終了
+    Done(ExecutorId),
+
+    /// 異常終了
+    Error(ExecutorId),
+}
 
 /// ワークフローの送信側
 #[derive(Debug, Clone)]

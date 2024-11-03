@@ -1,6 +1,6 @@
 //! オペレーターモジュール
 
-use crate::channel::{ExecutorMessage, ExecutorTx, WorkflowTx};
+use crate::channel::{ExecutorMessage, ExecutorTx, WfMessage, WorkflowTx};
 use crate::container::{Container, ContainerError, ContainerMap};
 use crate::edge::Edge;
 use crate::node::{Node, NodeError};
@@ -91,10 +91,16 @@ impl StatusMap {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn end(&mut self, exec_id: ExecutorId) {
+    async fn end(&mut self, exec_id: ExecutorId, is_safe: bool) {
         if let Some((_, wf_tx)) = self.0.remove(&exec_id) {
             debug!("Send end message");
-            let _ = wf_tx.send(exec_id).await;
+            let _ = wf_tx
+                .send(if is_safe {
+                    WfMessage::Done(exec_id)
+                } else {
+                    WfMessage::Error(exec_id)
+                })
+                .await;
         }
     }
 
@@ -109,7 +115,7 @@ impl Drop for StatusMap {
     }
 }
 
-type Handler<T> = (JoinHandle<T>, ExecutorId);
+type Handler<T> = (JoinHandle<Result<T, NodeError>>, ExecutorId);
 
 /// ハンドラ管理
 #[derive(Debug)]
@@ -130,7 +136,7 @@ impl<T: Debug> Handlers<T> {
     }
 
     #[tracing::instrument(skip(self, handle))]
-    fn push(&mut self, key: usize, handle: JoinHandle<T>, exec_id: ExecutorId) {
+    fn push(&mut self, key: usize, handle: JoinHandle<Result<T, NodeError>>, exec_id: ExecutorId) {
         assert_eq!(self.retains.pop_front().unwrap(), key);
         self.handles[key] = Some((handle, exec_id));
         #[cfg(feature = "dev")]
@@ -145,7 +151,14 @@ impl<T: Debug> Handlers<T> {
         self.retains.push_back(key);
         let (handle, exec_id) = self.handles[key].take().unwrap();
         let name = handle.await.unwrap();
-        debug!("Finish node: {:?}", name);
+        match name {
+            Ok(name) => {
+                debug!("Finish node: {:?}", name);
+            }
+            Err(e) => {
+                warn!("Finish node with error: {:?}", e);
+            }
+        }
         #[cfg(feature = "dev")]
         debug!(
             "{:?} tasks are running(remove)",
@@ -194,7 +207,7 @@ pub struct Operator {
     exec_tx: ExecutorTx,
     workflows: HashMap<WorkflowId, Workflow>,
     status: StatusMap,
-    handlers: Handlers<Result<&'static str, NodeError>>,
+    handlers: Handlers<&'static str>,
     containers: ContainerMap,
     queue: ExecutableQueue,
     #[cfg(feature = "dev")]
@@ -474,7 +487,7 @@ impl Operator {
                 .containers
                 .check_edges_exists_in_exec_id(exec_id, edges)
             {
-                self.status.end(exec_id).await;
+                self.status.end(exec_id, true).await; // TODO: ほんとに true?
                 true
             } else {
                 false
@@ -520,7 +533,7 @@ impl Operator {
         let mut flag = false;
         for exec_id in self.handlers.check_handles().await {
             self.containers.finish_containers(exec_id);
-            self.status.end(exec_id).await;
+            self.status.end(exec_id, false).await;
             flag = true;
         }
         flag
@@ -532,10 +545,10 @@ impl Operator {
     ///
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
-    pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId) {
+    pub async fn finish_workflow_by_execute_id(&mut self, exec_id: ExecutorId, is_safe: bool) {
         debug!("Finish workflow");
         self.containers.finish_containers(exec_id);
-        self.status.end(exec_id).await;
+        self.status.end(exec_id, is_safe).await;
     }
 
     /// ワークフローが全て終了しているか確認

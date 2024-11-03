@@ -30,9 +30,9 @@ pub enum NodeError {
     #[error("Error while running the node ({0})")]
     RunningError(#[from] crate::operator::OperatorError),
 
-    /// 実行中の任意のエラー
-    #[error("Error while running the node")]
-    AnyError,
+    /// 内部でのワークフロー実行エラー
+    #[error("Error while running the workflow")]
+    InnerWorkflowError,
 }
 
 /// ノードID
