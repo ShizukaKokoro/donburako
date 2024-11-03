@@ -563,3 +563,9 @@ impl Operator {
         self.handlers.handles.len() - self.handlers.retains.len()
     }
 }
+impl Drop for Operator {
+    #[tracing::instrument(skip(self))]
+    fn drop(&mut self) {
+        debug!("Drop operator");
+    }
+}
