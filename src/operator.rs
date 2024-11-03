@@ -71,6 +71,11 @@ impl ExecutableQueue {
             None
         }
     }
+
+    /// キューが空か確認
+    fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
 }
 impl Drop for ExecutableQueue {
     fn drop(&mut self) {
@@ -336,13 +341,14 @@ impl Operator {
 
     /// 次に実行するノードの取得
     pub fn next_node(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
-        if let Some((node, exec_id)) = self.queue.pop() {
-            #[cfg(feature = "dev")]
-            self.check_timer(&exec_id);
-            Some((node, exec_id))
-        } else {
-            None
+        while !self.queue.is_empty() {
+            if let Some((node, exec_id)) = self.queue.pop() {
+                #[cfg(feature = "dev")]
+                self.check_timer(&exec_id);
+                return Some((node, exec_id));
+            }
         }
+        None
     }
 
     /// 新しいコンテナの追加
