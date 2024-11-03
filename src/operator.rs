@@ -267,12 +267,12 @@ impl Operator {
     /// # Returns
     ///
     /// 実行ID
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, wf_tx))]
     pub async fn start_workflow(&mut self, wf_id: WorkflowId, wf_tx: WorkflowTx) -> ExecutorId {
         let exec_id = ExecutorId::new();
         #[cfg(feature = "dev")]
         {
-            tracing::info!("Start workflow: {:?}({:?})", wf_id, exec_id);
+            tracing::info!("Start workflow: {:?}", exec_id);
             let _ = self.timer.insert(exec_id, std::time::Instant::now());
         }
         self.status.start(exec_id, wf_id, wf_tx);
