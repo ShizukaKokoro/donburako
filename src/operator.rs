@@ -147,24 +147,23 @@ impl<T: Debug> Handlers<T> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn remove(&mut self, key: usize) -> ExecutorId {
+    async fn remove(&mut self, key: usize) -> (ExecutorId, Option<T>) {
         self.retains.push_back(key);
         let (handle, exec_id) = self.handles[key].take().unwrap();
-        let name = handle.await.unwrap();
-        match name {
-            Ok(name) => {
-                debug!("Finish node: {:?}", name);
-            }
+        let result = handle.await.unwrap();
+        let result = match result {
+            Ok(result) => Some(result),
             Err(e) => {
                 warn!("Finish node with error: {:?}", e);
+                None
             }
-        }
+        };
         #[cfg(feature = "dev")]
         debug!(
             "{:?} tasks are running(remove)",
             self.handles.len() - self.retains.len()
         );
-        exec_id
+        (exec_id, result)
     }
 
     #[tracing::instrument(skip(self))]
@@ -512,7 +511,16 @@ impl Operator {
     /// ワークフローが終了している場合は true
     #[tracing::instrument(skip(self))]
     pub(crate) async fn finish_node(&mut self, key: usize) -> bool {
-        let exec_id = self.handlers.remove(key).await;
+        let (exec_id, result) = self.handlers.remove(key).await;
+        match result {
+            Some(name) => {
+                debug!("Finish node: {:?}", name);
+            }
+            None => {
+                debug!("Finish node with error");
+                self.status.end(exec_id, false).await;
+            }
+        }
         if self.is_finished(exec_id).await {
             #[cfg(feature = "dev")]
             self.stop_timer(&exec_id);
