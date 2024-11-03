@@ -158,8 +158,23 @@ impl<T: Debug> Handlers<T> {
         self.retains.front().cloned()
     }
 
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<Handler<T>>> {
-        self.handles.iter_mut()
+    #[tracing::instrument(skip(self))]
+    async fn check_handles(&mut self) -> HashSet<ExecutorId> {
+        let mut finished = HashSet::new();
+        for (key, handle) in self.handles.iter_mut().enumerate() {
+            if let Some((h, exec_id)) = handle.take() {
+                if h.is_finished() {
+                    if let Err(e) = h.await {
+                        warn!("Handle error: {:?} ({:?})", e, exec_id);
+                        let _ = finished.insert(exec_id);
+                        self.retains.push_back(key);
+                    }
+                } else {
+                    assert!(handle.replace((h, exec_id)).is_none());
+                }
+            }
+        }
+        finished
     }
 }
 impl<T: Debug> Drop for Handlers<T> {
@@ -501,19 +516,10 @@ impl Operator {
     #[tracing::instrument(skip(self))]
     pub(crate) async fn check_handles(&mut self) -> bool {
         let mut flag = false;
-        for handle in self.handlers.iter_mut() {
-            if let Some((h, exec_id)) = handle.take() {
-                if h.is_finished() {
-                    if let Err(e) = h.await {
-                        warn!("Handle error: {:?} ({:?})", e, exec_id);
-                        self.containers.finish_containers(exec_id);
-                        self.status.end(exec_id).await;
-                        flag = true;
-                    }
-                } else {
-                    assert!(handle.replace((h, exec_id)).is_none());
-                }
-            }
+        for exec_id in self.handlers.check_handles().await {
+            self.containers.finish_containers(exec_id);
+            self.status.end(exec_id).await;
+            flag = true;
         }
         flag
     }
