@@ -182,6 +182,7 @@ impl<T: Debug> Handlers<T> {
                         warn!("Handle error: {:?} ({:?})", e, exec_id);
                         let _ = finished.insert(exec_id);
                         self.retains.push_back(key);
+                        debug!("Done({})", key);
                     }
                 } else {
                     assert!(handle.replace((h, exec_id)).is_none());
