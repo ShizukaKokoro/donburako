@@ -115,17 +115,17 @@ impl Drop for StatusMap {
     }
 }
 
-type Handler<T> = (JoinHandle<Result<T, NodeError>>, ExecutorId);
+type Handler = (JoinHandle<Result<&'static str, NodeError>>, ExecutorId);
 
 /// ハンドラ管理
 #[derive(Debug)]
-struct Handlers<T: Debug> {
-    handles: Vec<Option<Handler<T>>>,
+struct Handlers {
+    handles: Vec<Option<Handler>>,
     retains: VecDeque<usize>,
 }
-impl<T: Debug> Handlers<T> {
+impl Handlers {
     fn new(n: usize) -> Self {
-        let mut handles: Vec<Option<Handler<T>>> = Vec::with_capacity(n);
+        let mut handles = Vec::with_capacity(n);
         let mut retains = VecDeque::new();
         for i in 0..n {
             retains.push_back(i);
@@ -136,7 +136,12 @@ impl<T: Debug> Handlers<T> {
     }
 
     #[tracing::instrument(skip(self, handle))]
-    fn push(&mut self, key: usize, handle: JoinHandle<Result<T, NodeError>>, exec_id: ExecutorId) {
+    fn push(
+        &mut self,
+        key: usize,
+        handle: JoinHandle<Result<&'static str, NodeError>>,
+        exec_id: ExecutorId,
+    ) {
         assert_eq!(self.retains.pop_front().unwrap(), key);
         self.handles[key] = Some((handle, exec_id));
         #[cfg(feature = "dev")]
@@ -147,7 +152,7 @@ impl<T: Debug> Handlers<T> {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn remove(&mut self, key: usize) -> (ExecutorId, Option<T>) {
+    async fn remove(&mut self, key: usize) -> (ExecutorId, Option<&'static str>) {
         self.retains.push_back(key);
         let (handle, exec_id) = self.handles[key].take().unwrap();
         let result = handle.await.unwrap();
@@ -177,11 +182,16 @@ impl<T: Debug> Handlers<T> {
         for (key, handle) in self.handles.iter_mut().enumerate() {
             if let Some((h, exec_id)) = handle.take() {
                 if h.is_finished() {
-                    if let Err(e) = h.await {
-                        warn!("Handle error: {:?} ({:?})", e, exec_id);
-                        let _ = finished.insert(exec_id);
-                        self.retains.push_back(key);
-                        debug!("Done({})", key);
+                    match h.await {
+                        Ok(result) => {
+                            assert!(handle.replace((spawn(async { result }), exec_id)).is_none());
+                        }
+                        Err(e) => {
+                            warn!("Handle error: {:?} ({:?})", e, exec_id);
+                            let _ = finished.insert(exec_id);
+                            self.retains.push_back(key);
+                            debug!("Done({})", key);
+                        }
                     }
                 } else {
                     assert!(handle.replace((h, exec_id)).is_none());
@@ -191,7 +201,7 @@ impl<T: Debug> Handlers<T> {
         finished
     }
 }
-impl<T: Debug> Drop for Handlers<T> {
+impl Drop for Handlers {
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
         assert!(self.handles.iter().all(|h| h.is_none()));
@@ -207,7 +217,7 @@ pub struct Operator {
     exec_tx: ExecutorTx,
     workflows: HashMap<WorkflowId, Workflow>,
     status: StatusMap,
-    handlers: Handlers<&'static str>,
+    handlers: Handlers,
     containers: ContainerMap,
     queue: ExecutableQueue,
     #[cfg(feature = "dev")]
