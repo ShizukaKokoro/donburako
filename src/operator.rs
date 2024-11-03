@@ -72,6 +72,12 @@ impl ExecutableQueue {
         }
     }
 }
+impl Drop for ExecutableQueue {
+    fn drop(&mut self) {
+        assert!(self.queue.is_empty());
+        assert!(self.set.is_empty());
+    }
+}
 
 #[derive(Debug)]
 struct StatusMap(HashMap<ExecutorId, (WorkflowId, WorkflowTx)>);
@@ -96,6 +102,11 @@ impl StatusMap {
         self.0.is_empty()
     }
 }
+impl Drop for StatusMap {
+    fn drop(&mut self) {
+        assert!(self.0.is_empty());
+    }
+}
 
 type Handler<T> = (JoinHandle<T>, ExecutorId);
 
@@ -113,6 +124,7 @@ impl<T: Debug> Handlers<T> {
             retains.push_back(i);
             handles.push(None);
         }
+        assert_eq!(handles.len(), retains.len());
         Self { handles, retains }
     }
 
@@ -148,6 +160,12 @@ impl<T: Debug> Handlers<T> {
 
     fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<Handler<T>>> {
         self.handles.iter_mut()
+    }
+}
+impl<T: Debug> Drop for Handlers<T> {
+    fn drop(&mut self) {
+        assert!(self.handles.iter().all(|h| h.is_none()));
+        assert_eq!(self.handles.len(), self.retains.len());
     }
 }
 
