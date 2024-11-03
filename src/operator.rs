@@ -51,7 +51,7 @@ impl ExecutableQueue {
     /// 新しい実行可能なノードのキューの生成
     #[tracing::instrument(skip(self))]
     fn push(&mut self, node: Arc<Node>, exec_id: ExecutorId) -> bool {
-        debug!("Push node");
+        trace!("Push node");
         if self.set.insert((node.clone(), exec_id)) {
             self.queue.push_back((node.clone(), exec_id));
             true
@@ -65,7 +65,7 @@ impl ExecutableQueue {
     fn pop(&mut self) -> Option<(Arc<Node>, ExecutorId)> {
         if let Some(item) = self.queue.pop_front() {
             assert!(self.set.remove(&item));
-            debug!("Pop node");
+            trace!("Pop node");
             Some(item)
         } else {
             None
@@ -145,7 +145,7 @@ impl Handlers {
         assert_eq!(self.retains.pop_front().unwrap(), key);
         self.handles[key] = Some((handle, exec_id));
         #[cfg(feature = "dev")]
-        debug!(
+        trace!(
             "{:?} tasks are running(push)",
             self.handles.len() - self.retains.len()
         );
@@ -164,7 +164,7 @@ impl Handlers {
             }
         };
         #[cfg(feature = "dev")]
-        debug!(
+        trace!(
             "{:?} tasks are running(remove)",
             self.handles.len() - self.retains.len()
         );
@@ -368,7 +368,7 @@ impl Operator {
         if self.workflows[self.status.get_workflow_id(&exec_id).unwrap()].is_ignored(&edge) {
             return Ok(());
         }
-        debug!("Add new container");
+        trace!("Add new container");
         self.containers
             .add_new_container(edge.clone(), exec_id, data)?;
         self.check_executable_nodes(&[edge], exec_id).await;
@@ -394,7 +394,7 @@ impl Operator {
         if !self.containers.is_running(exec_id) {
             return Err(OperatorError::NotRunning(exec_id));
         }
-        debug!("Get container");
+        trace!("Get container");
         let mut containers = VecDeque::new();
         for e in edge {
             if let Some(container) = self.containers.get_container(e.clone(), exec_id) {
@@ -437,10 +437,10 @@ impl Operator {
                 return Err(OperatorError::NotRunning(exec_id));
             }
         };
-        debug!("Add container: {:?}", container);
+        trace!("Add container: {:?}", container);
         for (e, mut c) in edges.iter().zip(container) {
             if self.workflows[wf_id].is_ignored(e) {
-                debug!("Ignore edge");
+                trace!("Ignore edge");
                 c.take_anyway();
                 continue;
             } else {
@@ -461,7 +461,7 @@ impl Operator {
     /// * `exec_id` - 実行ID
     #[tracing::instrument(skip(self))]
     async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
-        debug!("Check executable nodes");
+        trace!("Check executable nodes");
         let mut flag = false;
         for e in edges {
             let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
@@ -491,7 +491,7 @@ impl Operator {
     /// 終了している場合は true
     #[tracing::instrument(skip(self))]
     async fn is_finished(&mut self, exec_id: ExecutorId) -> bool {
-        debug!("Check finished");
+        trace!("Check finished");
         if let Some(wf_id) = self.status.get_workflow_id(&exec_id) {
             let edges = self.workflows[wf_id].end_edges();
             if self
@@ -588,7 +588,7 @@ impl Operator {
     #[tracing::instrument(skip(self))]
     fn check_timer(&self, exec_id: &ExecutorId) {
         if let Some(start) = self.timer.get(exec_id) {
-            tracing::debug!("{:?} is at {:?}", exec_id, start.elapsed());
+            tracing::trace!("{:?} is at {:?}", exec_id, start.elapsed());
         }
     }
 
@@ -598,7 +598,7 @@ impl Operator {
         if let Some(start) = self.timer.remove(exec_id) {
             let end = std::time::Instant::now();
             let duration = end - start;
-            tracing::info!("{:?} is finished in {:?}", exec_id, duration);
+            tracing::debug!("{:?} is finished in {:?}", exec_id, duration);
         }
     }
 
@@ -612,6 +612,6 @@ impl Drop for Operator {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
-        debug!("Drop operator");
+        trace!("Drop operator");
     }
 }

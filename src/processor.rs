@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 use tokio::task::{spawn, JoinHandle};
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 /// プロセッサーエラー
 #[derive(Debug, Error)]
@@ -106,11 +106,8 @@ impl ProcessorBuilder {
             _ = sleep(Duration::from_millis(100)) => Some(ExecutorMessage::Check),
             } {
                 #[cfg(feature = "dev")]
-                {
-                    debug!("Start loop: {:?}", start.elapsed());
-                    debug!("{} tasks is running", op.lock().await.running_tasks());
-                }
-                debug!("Receive message: {:?}", message);
+                trace!("Start loop: {:?}", start.elapsed());
+                trace!("Receive message: {:?}", message);
                 match message {
                     ExecutorMessage::Done(key) => {
                         if op.lock().await.finish_node(key).await
@@ -132,12 +129,12 @@ impl ProcessorBuilder {
                     }
                 }
                 #[cfg(feature = "dev")]
-                debug!("Processing : {:?}", start.elapsed());
+                trace!("Processing : {:?}", start.elapsed());
                 let op_clone = op.clone();
                 op.lock().await.process(&op_clone).await;
                 #[cfg(feature = "dev")]
                 {
-                    debug!("Elapsed time: {:?}", start.elapsed());
+                    trace!("Elapsed time: {:?}", start.elapsed());
                     start = std::time::Instant::now();
                 }
             }

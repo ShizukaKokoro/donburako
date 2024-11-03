@@ -8,7 +8,7 @@ use tokio::sync::mpsc::{
     error::{SendError, TrySendError},
     Receiver, Sender,
 };
-use tracing::debug;
+use tracing::trace;
 
 /// ワークフローのメッセージ
 #[derive(Debug)]
@@ -37,7 +37,7 @@ impl Drop for WorkflowTx {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
-        debug!("Drop WorkflowTx");
+        trace!("Drop WorkflowTx");
     }
 }
 
@@ -52,9 +52,9 @@ impl WorkflowRx {
     /// 全ての [`WorkflowTx`] がドロップすると、`None` が返る。
     #[tracing::instrument(skip(self))]
     pub async fn recv(&mut self) -> Option<WfMessage> {
-        debug!("Wait received message");
+        trace!("Wait received message");
         let result = self.rx.recv().await;
-        debug!("Received message: {:?}", result);
+        trace!("Received message: {:?}", result);
         result
     }
 }
@@ -63,7 +63,7 @@ impl Drop for WorkflowRx {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
-        debug!("Drop WorkflowRx");
+        trace!("Drop WorkflowRx");
     }
 }
 
@@ -100,7 +100,7 @@ impl ExecutorTx {
     pub fn send(&self, message: ExecutorMessage) -> Result<(), TrySendError<ExecutorMessage>> {
         #[cfg(feature = "dev")]
         let start = std::time::Instant::now();
-        debug!(
+        trace!(
             "Send message: {:?} (capacity: {})",
             message,
             self.tx.capacity()
@@ -109,7 +109,7 @@ impl ExecutorTx {
             Ok(_) => Ok(()),
             Err(TrySendError::Closed(message)) => Err(TrySendError::Closed(message)),
             Err(TrySendError::Full(message)) => {
-                debug!(
+                trace!(
                     "Failed to send message because the channel is full: {:?}",
                     message
                 );
@@ -117,7 +117,7 @@ impl ExecutorTx {
             }
         };
         #[cfg(feature = "dev")]
-        debug!(
+        trace!(
             "Send message: {:?} (elapsed: {:?})",
             result,
             start.elapsed()
@@ -130,7 +130,7 @@ impl Drop for ExecutorTx {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
-        debug!("Drop ExecutorTx");
+        trace!("Drop ExecutorTx");
     }
 }
 
@@ -149,7 +149,7 @@ impl ExecutorRx {
         let start = std::time::Instant::now();
         let result = self.rx.recv().await;
         #[cfg(feature = "dev")]
-        debug!(
+        trace!(
             "Receive message: {:?} (elapsed: {:?})",
             result,
             start.elapsed()
@@ -162,7 +162,7 @@ impl Drop for ExecutorRx {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
         #[cfg(feature = "dev")]
-        debug!("Drop ExecutorRx");
+        trace!("Drop ExecutorRx");
     }
 }
 
