@@ -26,7 +26,9 @@ impl WorkflowTx {
 }
 #[cfg(feature = "dev")]
 impl Drop for WorkflowTx {
+    #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         debug!("Drop WorkflowTx");
     }
 }
@@ -50,7 +52,9 @@ impl WorkflowRx {
 }
 #[cfg(feature = "dev")]
 impl Drop for WorkflowRx {
+    #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         debug!("Drop WorkflowRx");
     }
 }
@@ -115,7 +119,9 @@ impl ExecutorTx {
 }
 #[cfg(feature = "dev")]
 impl Drop for ExecutorTx {
+    #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         debug!("Drop ExecutorTx");
     }
 }
@@ -145,7 +151,9 @@ impl ExecutorRx {
 }
 #[cfg(feature = "dev")]
 impl Drop for ExecutorRx {
+    #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         debug!("Drop ExecutorRx");
     }
 }

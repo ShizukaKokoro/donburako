@@ -104,6 +104,7 @@ impl StatusMap {
 }
 impl Drop for StatusMap {
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         assert!(self.0.is_empty());
     }
 }
@@ -179,6 +180,7 @@ impl<T: Debug> Handlers<T> {
 }
 impl<T: Debug> Drop for Handlers<T> {
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         assert!(self.handles.iter().all(|h| h.is_none()));
         assert_eq!(self.handles.len(), self.retains.len());
     }
@@ -572,6 +574,7 @@ impl Operator {
 impl Drop for Operator {
     #[tracing::instrument(skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "dev")]
         debug!("Drop operator");
     }
 }
