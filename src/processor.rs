@@ -48,7 +48,7 @@ impl Default for ProcessorBuilder {
     fn default() -> Self {
         Self {
             workflow: Vec::new(),
-            capacity: 100,
+            capacity: 1024,
         }
     }
 }
