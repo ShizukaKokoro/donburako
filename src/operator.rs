@@ -194,10 +194,18 @@ impl Handlers {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn check_handles(&mut self) -> HashSet<ExecutorId> {
+    async fn check_handles(&mut self, status: &StatusMap) -> HashSet<ExecutorId> {
         let mut finished = HashSet::new();
         for (key, handle) in self.handles.iter_mut().enumerate() {
             if let Some((h, exec_id)) = handle.take() {
+                if !status.is_running(&exec_id) {
+                    debug!("{:?} is not running", exec_id);
+                    h.abort();
+                    let _ = h.await;
+                    let _ = finished.insert(exec_id);
+                    self.retains.push_back(key);
+                    continue;
+                }
                 if h.is_finished() {
                     match h.await {
                         Ok(result) => {
@@ -581,7 +589,7 @@ impl Operator {
     /// ワークフローが終了している場合は true
     #[tracing::instrument(skip(self))]
     pub(crate) async fn check_handles(&mut self) {
-        for exec_id in self.handlers.check_handles().await {
+        for exec_id in self.handlers.check_handles(&self.status).await {
             self.containers.finish_containers(exec_id);
             self.status.end(exec_id, false).await;
         }
