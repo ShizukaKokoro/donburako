@@ -403,14 +403,10 @@ impl Operator {
         exec_id: ExecutorId,
         data: T,
     ) -> Result<(), OperatorError> {
-        if self.workflows[self.status.get_workflow_id(&exec_id).unwrap()].is_ignored(&edge) {
-            return Ok(());
-        }
-        trace!("Add new container");
-        self.containers
-            .add_new_container(edge.clone(), exec_id, data)?;
-        self.check_executable_nodes(&[edge], exec_id).await;
-        Ok(())
+        let mut con = Container::default();
+        con.store(data);
+        self.add_container(&[edge], exec_id, VecDeque::from(vec![con]))
+            .await
     }
 
     /// コンテナの取得

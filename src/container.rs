@@ -141,30 +141,6 @@ impl ContainerMap {
         self.0.contains_key(&exec_id)
     }
 
-    /// 新しいコンテナの追加
-    ///
-    /// ワークフローの入り口となるエッジに対して、新しいコンテナを追加する。
-    ///
-    /// # Arguments
-    ///
-    /// * `edge` - エッジ
-    /// * `exec_id` - 実行ID
-    /// * `data` - データ
-    pub(crate) fn add_new_container<T: 'static + Send + Sync>(
-        &mut self,
-        edge: Arc<Edge>,
-        exec_id: ExecutorId,
-        data: T,
-    ) -> Result<(), ContainerError> {
-        if !edge.check_type::<T>() {
-            return Err(ContainerError::TypeMismatch);
-        }
-        let mut container = Container::default();
-        container.store(data);
-        self.add_container(edge, exec_id, container)?;
-        Ok(())
-    }
-
     /// 実行準備ができているか確認する
     ///
     /// # Arguments
@@ -418,21 +394,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_container_map_add_new_container() {
-        let exec_id = ExecutorId::new();
-        let mut map = ContainerMap::default();
-        let edge = Arc::new(Edge::new::<i32>());
-        let result = map.add_new_container(edge.clone(), exec_id, 42);
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
     async fn test_container_map_check_edge_exists() {
         let exec_id = ExecutorId::new();
         let mut map = ContainerMap::default();
         map.entry_by_exec_id(exec_id);
         let edge = Arc::new(Edge::new::<i32>());
-        map.add_new_container(edge.clone(), exec_id, 42).unwrap();
+        let mut con = Container::default();
+        con.store(42);
+        map.add_container(edge.clone(), exec_id, con).unwrap();
 
         assert!(map.check_edge_exists(edge, exec_id));
 
@@ -447,7 +416,9 @@ mod tests {
         map.entry_by_exec_id(exec_id);
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
-        map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
+        let mut con = Container::default();
+        con.store(42);
+        map.add_container(edge0.clone(), exec_id, con).unwrap();
 
         let node = Arc::new(Node::new_test(
             vec![edge0.clone(), edge1.clone()],
@@ -457,7 +428,9 @@ mod tests {
         ));
         assert!(!map.is_ready(&node, exec_id));
 
-        map.add_new_container(edge1.clone(), exec_id, "42").unwrap();
+        let mut con = Container::default();
+        con.store("42");
+        map.add_container(edge1.clone(), exec_id, con).unwrap();
         assert!(map.is_ready(&node, exec_id));
     }
 
@@ -468,7 +441,9 @@ mod tests {
         map.entry_by_exec_id(exec_id);
         let edge0 = Arc::new(Edge::new::<i32>());
         let edge1 = Arc::new(Edge::new::<&str>());
-        map.add_new_container(edge0.clone(), exec_id, 42).unwrap();
+        let mut con = Container::default();
+        con.store(42);
+        map.add_container(edge0.clone(), exec_id, con).unwrap();
 
         let node = Arc::new(Node::new_test(
             vec![edge0.clone(), edge1.clone()],
@@ -485,7 +460,9 @@ mod tests {
         let mut map = ContainerMap::default();
         map.entry_by_exec_id(exec_id);
         let edge = Arc::new(Edge::new::<i32>());
-        map.add_new_container(edge.clone(), exec_id, 42).unwrap();
+        let mut con = Container::default();
+        con.store(42);
+        map.add_container(edge.clone(), exec_id, con).unwrap();
 
         let container = map.get_container(edge, exec_id);
         assert!(container.is_some());
