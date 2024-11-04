@@ -311,6 +311,17 @@ impl ContainerMap {
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// 中身の入っているコンテナの数を取得する
+    #[cfg(feature = "dev")]
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn remaining_containers(&self) -> usize {
+        self.0
+            .values()
+            .flat_map(|map| map.values())
+            .filter(|c| c.is_some())
+            .count()
+    }
 }
 impl Drop for ContainerMap {
     fn drop(&mut self) {

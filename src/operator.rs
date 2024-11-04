@@ -644,6 +644,12 @@ impl Operator {
     pub(crate) fn running_tasks(&self) -> usize {
         self.handlers.handles.len() - self.handlers.retains.len()
     }
+
+    #[cfg(feature = "dev")]
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn remaining_containers(&self) -> usize {
+        self.containers.remaining_containers()
+    }
 }
 impl Drop for Operator {
     #[tracing::instrument(skip(self))]

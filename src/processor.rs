@@ -110,6 +110,8 @@ impl ProcessorBuilder {
                     trace!("Start loop: {:?}", start.elapsed());
                     let cnt = op.lock().await.running_tasks();
                     trace!("{} tasks is running", cnt);
+                    let cnt = op.lock().await.remaining_containers();
+                    trace!("{} containers is remaining", cnt);
                 }
                 trace!("Receive message: {:?}", message);
                 match message {
