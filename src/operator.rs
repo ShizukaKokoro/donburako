@@ -475,6 +475,7 @@ impl Operator {
             }
         };
         trace!("Add container: {:?}", container);
+        let mut flag = false;
         for (e, mut c) in edges.iter().zip(container) {
             if self.workflows[wf_id].is_ignored(e) {
                 trace!("Ignore edge");
@@ -484,24 +485,6 @@ impl Operator {
             } else {
                 self.containers.add_container(e.clone(), exec_id, c)?;
             }
-        }
-        self.check_executable_nodes(edges, exec_id).await;
-        Ok(())
-    }
-
-    /// 実行可能なノードの精査
-    ///
-    /// 更新があったエッジに対して、実行可能なノードをキューに追加する。
-    ///
-    /// # Arguments
-    ///
-    /// * `edges` - エッジ
-    /// * `exec_id` - 実行ID
-    #[tracing::instrument(skip(self))]
-    async fn check_executable_nodes(&mut self, edges: &[Arc<Edge>], exec_id: ExecutorId) {
-        trace!("Check executable nodes");
-        let mut flag = false;
-        for e in edges {
             let wf_id = self.status.get_workflow_id(&exec_id).unwrap();
             if let Some(node) = self.workflows[wf_id].get_node(e) {
                 if self.containers.is_ready(&node, exec_id) {
@@ -514,6 +497,7 @@ impl Operator {
             #[cfg(feature = "dev")]
             self.check_timer(&exec_id);
         }
+        Ok(())
     }
 
     /// ワークフローの終了確認
