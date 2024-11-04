@@ -116,6 +116,10 @@ impl StatusMap {
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 impl Drop for StatusMap {
     fn drop(&mut self) {
@@ -610,7 +614,10 @@ impl Operator {
     /// ワークフローが全て終了しているか確認
     pub(crate) fn is_all_finished(&self) -> bool {
         #[cfg(feature = "dev")]
-        trace!("Check all finished {:?}", self.status);
+        trace!(
+            "Check all finished ({:?} workflows are running)",
+            self.status.len()
+        );
         self.containers.is_empty()
             && self.status.is_empty()
             && self.handlers.is_empty()
