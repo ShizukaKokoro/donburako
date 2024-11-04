@@ -147,7 +147,28 @@ impl ExecutorRx {
     pub async fn recv(&mut self) -> Option<ExecutorMessage> {
         #[cfg(feature = "dev")]
         let start = std::time::Instant::now();
-        let result = self.rx.recv().await;
+        let result = match self.rx.recv().await? {
+            ExecutorMessage::Done(key) => Some(ExecutorMessage::Done(key)),
+            ExecutorMessage::Check => Some(ExecutorMessage::Check),
+            _ => {
+                let mut result = ExecutorMessage::Update;
+                loop {
+                    match self.rx.try_recv() {
+                        Ok(ExecutorMessage::Done(key)) => {
+                            result = ExecutorMessage::Done(key);
+                            break;
+                        }
+                        Ok(ExecutorMessage::Check) => {
+                            result = ExecutorMessage::Check;
+                            break;
+                        }
+                        Ok(_) => continue,
+                        Err(_) => break,
+                    }
+                }
+                Some(result)
+            }
+        };
         #[cfg(feature = "dev")]
         trace!(
             "Receive message: {:?} (elapsed: {:?})",
