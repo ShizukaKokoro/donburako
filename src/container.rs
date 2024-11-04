@@ -309,7 +309,10 @@ impl ContainerMap {
 
     #[tracing::instrument(skip(self))]
     pub(crate) fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.0
+            .values()
+            .flat_map(|map| map.values())
+            .all(|c| c.is_none())
     }
 
     /// 中身の入っているコンテナの数を取得する
