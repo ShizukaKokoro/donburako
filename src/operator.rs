@@ -575,14 +575,11 @@ impl Operator {
     ///
     /// ワークフローが終了している場合は true
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn check_handles(&mut self) -> bool {
-        let mut flag = false;
+    pub(crate) async fn check_handles(&mut self) {
         for exec_id in self.handlers.check_handles().await {
             self.containers.finish_containers(exec_id);
             self.status.end(exec_id, false).await;
-            flag = true;
         }
-        flag
     }
 
     /// ワークフローの強制終了

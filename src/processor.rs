@@ -124,10 +124,8 @@ impl ProcessorBuilder {
                     ExecutorMessage::Start => {}
                     ExecutorMessage::Update => {}
                     ExecutorMessage::Check => {
-                        if op.lock().await.check_handles().await
-                            && shutdown_clone.is_cancelled()
-                            && op.lock().await.is_all_finished()
-                        {
+                        op.lock().await.check_handles().await;
+                        if shutdown_clone.is_cancelled() && op.lock().await.is_all_finished() {
                             break;
                         }
                     }
