@@ -306,6 +306,11 @@ impl ContainerMap {
             let _ = self.0.remove(&exec_id);
         }
     }
+
+    #[tracing::instrument(skip(self))]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 impl Drop for ContainerMap {
     fn drop(&mut self) {

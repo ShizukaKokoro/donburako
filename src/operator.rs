@@ -217,6 +217,11 @@ impl Handlers {
         }
         finished
     }
+
+    #[tracing::instrument(skip(self))]
+    fn is_empty(&self) -> bool {
+        self.retains.len() == self.handles.len()
+    }
 }
 impl Drop for Handlers {
     fn drop(&mut self) {
@@ -597,10 +602,11 @@ impl Operator {
     /// ワークフローが全て終了しているか確認
     pub(crate) fn is_all_finished(&self) -> bool {
         #[cfg(feature = "dev")]
-        {
-            trace!("Check all finished {:?}", self.status);
-        }
-        self.status.is_empty()
+        trace!("Check all finished {:?}", self.status);
+        self.containers.is_empty()
+            && self.status.is_empty()
+            && self.handlers.is_empty()
+            && self.queue.is_empty()
     }
 
     pub(crate) fn send_update(&self) {
