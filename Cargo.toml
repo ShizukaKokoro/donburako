@@ -10,7 +10,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0"
 thiserror = "1"
 tracing = "0"
-fake = "2"
+fake = "3"
 
 
 console-subscriber = { version = "0", optional = true }
