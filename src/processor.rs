@@ -58,13 +58,8 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `wf` - ワークフロービルダー
-    pub fn add_workflow(self, wf_id: WorkflowId, wf: WorkflowBuilder) -> Self {
-        let mut wfs = self.workflow;
-        wfs.push((wf_id, wf));
-        Self {
-            workflow: wfs,
-            ..self
-        }
+    pub fn add_workflow(&mut self, wf_id: WorkflowId, wf: WorkflowBuilder) {
+        self.workflow.push((wf_id, wf));
     }
 
     /// キューの容量の設定
@@ -72,8 +67,8 @@ impl ProcessorBuilder {
     /// # Arguments
     ///
     /// * `capacity` - キューの容量
-    pub fn set_capacity(self, capacity: usize) -> Self {
-        Self { capacity, ..self }
+    pub fn set_capacity(&mut self, capacity: usize) {
+        self.capacity = capacity;
     }
 
     /// ビルド
