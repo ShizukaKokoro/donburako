@@ -96,3 +96,8 @@ pub use crate::channel::workflow_channel;
 pub use crate::node::NodeBuilder;
 pub use crate::processor::ProcessorBuilder;
 pub use fake::{Fake, Faker};
+
+/// マクロを公開するモジュール。
+pub mod macros {
+    pub use donburako_macro::*;
+}
